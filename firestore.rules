@@ -5,7 +5,9 @@ service cloud.firestore {
     match /users/{userId} {
       allow read: if request.auth != null;
       allow create: if request.auth.uid == userId;
-      allow update: if request.auth.uid == userId;
+      allow update: if request.auth.uid == userId ||
+        (request.auth != null &&
+         request.resource.data.diff(resource.data).affectedKeys().hasOnly(['followers']));
     }
 
     match /posts/{postId} {
