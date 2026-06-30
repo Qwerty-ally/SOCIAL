@@ -25,8 +25,8 @@ export default function GoLivePage() {
 
   useEffect(() => {
     navigator.mediaDevices.getUserMedia({
-        video: { width: { ideal: 1280 }, height: { ideal: 720 }, frameRate: { ideal: 30 } },
-        audio: true,
+        video: { width: { ideal: 7680 }, height: { ideal: 4320 }, frameRate: { ideal: 60 } },
+        audio: { echoCancellation: true, noiseSuppression: true, sampleRate: 48000 },
       })
       .then(stream => {
         localStream.current = stream
@@ -73,6 +73,25 @@ export default function GoLivePage() {
     peerConns.current[viewerId] = pc
 
     localStream.current.getTracks().forEach(t => pc.addTrack(t, localStream.current))
+
+    // Boost bitrate — this is what prevents blurry video
+    pc.onnegotiationneeded = async () => {
+      pc.getSenders().forEach(sender => {
+        if (sender.track?.kind === 'video') {
+          const params = sender.getParameters()
+          if (!params.encodings) params.encodings = [{}]
+          params.encodings[0].maxBitrate = 20_000_000 // 20 Mbps
+          params.encodings[0].maxFramerate = 60
+          sender.setParameters(params).catch(() => {})
+        }
+        if (sender.track?.kind === 'audio') {
+          const params = sender.getParameters()
+          if (!params.encodings) params.encodings = [{}]
+          params.encodings[0].maxBitrate = 320_000 // 320 kbps audio
+          sender.setParameters(params).catch(() => {})
+        }
+      })
+    }
 
     pc.onicecandidate = async e => {
       if (e.candidate) {
