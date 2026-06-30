@@ -4,7 +4,8 @@ import { db } from '../firebase'
 import { useAuth } from '../context/AuthContext'
 import ComposeBox from '../components/ComposeBox'
 import PostCard from '../components/PostCard'
-import { Loader2, Users, Zap, AlertCircle } from 'lucide-react'
+import { Loader2, Users, Zap, AlertCircle, Radio } from 'lucide-react'
+import { Link } from 'react-router-dom'
 
 export default function HomePage() {
   const { profile } = useAuth()
@@ -12,6 +13,12 @@ export default function HomePage() {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
   const [tab, setTab] = useState('for-you')
+  const [liveStreams, setLiveStreams] = useState([])
+
+  useEffect(() => {
+    const q = query(collection(db, 'streams'), where('active', '==', true), limit(10))
+    return onSnapshot(q, snap => setLiveStreams(snap.docs.map(d => ({ id: d.id, ...d.data() }))), () => {})
+  }, [])
 
   useEffect(() => {
     setLoading(true)
@@ -51,6 +58,26 @@ export default function HomePage() {
           <TabBtn label="Following" icon={<Users size={15} />} active={tab === 'following'} onClick={() => setTab('following')} />
         </div>
       </div>
+
+      {liveStreams.length > 0 && (
+        <div className="px-4 py-3 border-b border-slate-700/50">
+          <p className="text-xs text-slate-500 font-semibold uppercase tracking-wider mb-2 flex items-center gap-1.5">
+            <Radio size={11} className="text-red-400" /> Live Now
+          </p>
+          <div className="flex gap-3 overflow-x-auto pb-1 anchor-scrollbar">
+            {liveStreams.map(s => (
+              <Link key={s.id} to={`/watch/${s.id}`} className="flex flex-col items-center gap-1.5 shrink-0">
+                <div className="relative">
+                  <img src={s.hostAvatar} alt="" className="w-14 h-14 rounded-full object-cover ring-2 ring-red-500" />
+                  <span className="absolute -bottom-1 left-1/2 -translate-x-1/2 bg-red-500 text-white text-[9px] font-bold px-1.5 py-0.5 rounded-full">LIVE</span>
+                </div>
+                <p className="text-xs text-slate-300 font-medium truncate w-16 text-center">{s.hostName}</p>
+                <p className="text-[10px] text-slate-500 flex items-center gap-0.5"><Users size={9} />{s.viewerCount ?? 0}</p>
+              </Link>
+            ))}
+          </div>
+        </div>
+      )}
 
       <ComposeBox onPost={() => {}} />
 

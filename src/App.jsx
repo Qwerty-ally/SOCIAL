@@ -12,6 +12,8 @@ import MessagesPage from './pages/MessagesPage'
 import BookmarksPage from './pages/BookmarksPage'
 import TrendingPage from './pages/TrendingPage'
 import ComposePage from './pages/ComposePage'
+import GoLivePage from './pages/GoLivePage'
+import WatchLivePage from './pages/WatchLivePage'
 import { Loader2 } from 'lucide-react'
 
 function Layout({ children }) {
@@ -56,6 +58,8 @@ function AppRoutes() {
       <Route path="/messages" element={<ProtectedRoute><Layout><MessagesPage /></Layout></ProtectedRoute>} />
       <Route path="/bookmarks" element={<ProtectedRoute><Layout><BookmarksPage /></Layout></ProtectedRoute>} />
       <Route path="/compose" element={<ProtectedRoute><Layout><ComposePage /></Layout></ProtectedRoute>} />
+      <Route path="/live" element={<ProtectedRoute><Layout><GoLivePage /></Layout></ProtectedRoute>} />
+      <Route path="/watch/:streamId" element={<ProtectedRoute><Layout><WatchLivePage /></Layout></ProtectedRoute>} />
       <Route path="/post/:id" element={<ProtectedRoute><Layout><PostPage /></Layout></ProtectedRoute>} />
       <Route path="/profile/:username" element={<ProtectedRoute><Layout><ProfilePage /></Layout></ProtectedRoute>} />
       <Route path="*" element={<Navigate to="/" replace />} />

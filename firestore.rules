@@ -35,6 +35,24 @@ service cloud.firestore {
       allow delete: if request.auth.uid == resource.data.to;
     }
 
+    match /streams/{streamId} {
+      allow read: if request.auth != null;
+      allow create: if request.auth != null;
+      allow update: if request.auth != null;
+      allow delete: if request.auth.uid == resource.data.hostId;
+
+      match /viewers/{viewerId} {
+        allow read, write: if request.auth != null;
+
+        match /hostCandidates/{id} {
+          allow read, write: if request.auth != null;
+        }
+        match /viewerCandidates/{id} {
+          allow read, write: if request.auth != null;
+        }
+      }
+    }
+
     match /conversations/{convoId} {
       allow read, write: if request.auth != null;
 

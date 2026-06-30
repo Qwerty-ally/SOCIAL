@@ -5,7 +5,7 @@ import { useAuth } from '../context/AuthContext'
 import { useNotifCount } from '../hooks/useNotifCount'
 import {
   Anchor, Home, Search, Bell, User, PlusSquare, MessageCircle,
-  Compass, LogOut, Bookmark, TrendingUp, Crown
+  Compass, LogOut, Bookmark, TrendingUp, Crown, Radio
 } from 'lucide-react'
 import toast from 'react-hot-toast'
 
@@ -76,6 +76,15 @@ export default function Sidebar() {
         >
           <PlusSquare size={18} />
           New Post
+        </Link>
+
+        {/* Go Live button */}
+        <Link
+          to="/live"
+          className="mt-2 flex items-center justify-center gap-2 w-full py-3 bg-red-500 hover:bg-red-400 text-white rounded-xl font-semibold text-sm transition shadow shadow-red-500/30"
+        >
+          <Radio size={18} />
+          Go Live
         </Link>
       </div>
 
