@@ -179,9 +179,9 @@ function StoryViewer({ groups, gi: initGi, si: initSi, onClose, currentUserId })
 
         {/* Media */}
         {story.mediaType === 'video' ? (
-          <video src={story.mediaUrl} autoPlay muted loop className="w-full h-full object-cover" />
+          <video src={story.mediaUrl} autoPlay muted loop className="w-full h-full object-contain" />
         ) : (
-          <img src={story.mediaUrl} alt="" className="w-full h-full object-cover" />
+          <img src={story.mediaUrl} alt="" className="w-full h-full object-contain" />
         )}
 
         {/* Tap zones */}
