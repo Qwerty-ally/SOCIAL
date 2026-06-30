@@ -133,6 +133,7 @@ export default function ProfilePage() {
       setLocalProfile(prev => ({ ...prev, ...updates }))
       setRenaming(false)
       toast.success('Profile renamed!')
+      if (updates.username) navigate(`/profile/${updates.username}`, { replace: true })
     } catch (err) {
       toast.error(err.message)
     }

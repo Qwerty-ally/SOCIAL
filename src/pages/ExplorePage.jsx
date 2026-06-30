@@ -27,7 +27,7 @@ export default function ExplorePage() {
     if (!searchQ.trim()) return
     setSearching(true)
 
-    // Search users
+    // Search users by username
     const usersQ = query(
       collection(db, 'users'),
       where('username', '>=', searchQ.toLowerCase()),
@@ -35,7 +35,19 @@ export default function ExplorePage() {
       limit(5)
     )
     const usersSnap = await getDocs(usersQ)
-    const users = usersSnap.docs.map(d => ({ id: d.id, ...d.data(), _type: 'user' }))
+    const byUsername = usersSnap.docs.map(d => ({ id: d.id, ...d.data(), _type: 'user' }))
+
+    // Search users by display name
+    const namesQ = query(
+      collection(db, 'users'),
+      where('displayName', '>=', searchQ),
+      where('displayName', '<=', searchQ + ''),
+      limit(5)
+    )
+    const namesSnap = await getDocs(namesQ)
+    const byName = namesSnap.docs.map(d => ({ id: d.id, ...d.data(), _type: 'user' }))
+    const seen = new Set(byUsername.map(u => u.id))
+    const users = [...byUsername, ...byName.filter(u => !seen.has(u.id))]
 
     // Search posts by tag
     const tag = searchQ.replace('#', '').toLowerCase()
