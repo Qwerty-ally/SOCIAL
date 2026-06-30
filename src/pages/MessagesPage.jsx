@@ -1,11 +1,11 @@
 import { useState, useEffect, useRef } from 'react'
 import {
   collection, query, where, orderBy, onSnapshot, addDoc,
-  serverTimestamp, getDocs, limit, doc, updateDoc, or
+  serverTimestamp, getDocs, limit, doc, updateDoc, deleteDoc, or
 } from 'firebase/firestore'
 import { db } from '../firebase'
 import { useAuth } from '../context/AuthContext'
-import { Search, Send, MessageCircle, Loader2, ArrowLeft, Users, Plus, X, Check, Settings, UserMinus, UserPlus } from 'lucide-react'
+import { Search, Send, MessageCircle, Loader2, ArrowLeft, Users, Plus, X, Check, Settings, UserMinus, UserPlus, Trash2 } from 'lucide-react'
 import { formatDistanceToNow } from 'date-fns'
 import toast from 'react-hot-toast'
 
@@ -237,10 +237,8 @@ export default function MessagesPage() {
           convo={activeConvo}
           currentUserId={user.uid}
           onClose={() => setShowGroupSettings(false)}
-          onUpdate={updated => {
-            setActiveConvo(updated)
-            setShowGroupSettings(false)
-          }}
+          onUpdate={updated => { setActiveConvo(updated); setShowGroupSettings(false) }}
+          onDelete={() => { setActiveConvo(null); setShowGroupSettings(false) }}
         />
       )}
     </div>
@@ -336,10 +334,18 @@ function GroupModal({ user, profile, onClose, onCreated }) {
   )
 }
 
-function GroupSettingsModal({ convo, currentUserId, onClose, onUpdate }) {
+function GroupSettingsModal({ convo, currentUserId, onClose, onUpdate, onDelete }) {
   const [searchQ, setSearchQ] = useState('')
   const [results, setResults] = useState([])
   const [saving, setSaving] = useState(false)
+
+  async function deleteGroup() {
+    if (!confirm('Delete this group for everyone? This cannot be undone.')) return
+    setSaving(true)
+    await deleteDoc(doc(db, 'conversations', convo.id))
+    toast.success('Group deleted')
+    onDelete()
+  }
 
   const members = Object.entries(convo.participantProfiles || {})
 
@@ -382,6 +388,11 @@ function GroupSettingsModal({ convo, currentUserId, onClose, onUpdate }) {
           <h2 className="font-semibold text-white flex items-center gap-2"><Settings size={16} className="text-sky-400" /> Manage Group</h2>
           <button onClick={onClose} className="text-slate-400 hover:text-white"><X size={18} /></button>
         </div>
+
+        <button onClick={deleteGroup} disabled={saving}
+          className="w-full flex items-center justify-center gap-2 py-2 rounded-xl border border-red-500/40 text-red-400 hover:bg-red-500/10 text-sm font-semibold transition disabled:opacity-50">
+          <Trash2 size={14} /> Delete Group
+        </button>
 
         {/* Current members */}
         <div>
