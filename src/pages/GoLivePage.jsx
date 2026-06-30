@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from 'react'
-import { collection, addDoc, serverTimestamp, onSnapshot, updateDoc, doc, setDoc } from 'firebase/firestore'
+import { collection, addDoc, serverTimestamp, onSnapshot, updateDoc, doc, setDoc, query, where, getDocs } from 'firebase/firestore'
 import { db } from '../firebase'
 import { useAuth } from '../context/AuthContext'
 import { useNavigate } from 'react-router-dom'
@@ -39,6 +39,10 @@ export default function GoLivePage() {
   async function startLive() {
     if (!localStream.current) return toast.error('Camera not ready')
     try {
+      // End any existing active streams for this user
+      const existing = await getDocs(query(collection(db, 'streams'), where('hostId', '==', user.uid), where('active', '==', true)))
+      await Promise.all(existing.docs.map(d => updateDoc(d.ref, { active: false })))
+
       const ref = await addDoc(collection(db, 'streams'), {
         hostId: user.uid,
         hostName: profile.displayName,
