@@ -43,10 +43,17 @@ export default function ProfilePage() {
         if (!snap.empty) {
           p = { id: snap.docs[0].id, ...snap.docs[0].data() }
         } else {
-          // Try matching by display name (case-insensitive)
+          // Try displayNameLower (case-insensitive)
           const nameQ = query(collection(db, 'users'), where('displayNameLower', '==', username.toLowerCase()), limit(1))
           const nameSnap = await getDocs(nameQ)
-          if (!nameSnap.empty) p = { id: nameSnap.docs[0].id, ...nameSnap.docs[0].data() }
+          if (!nameSnap.empty) {
+            p = { id: nameSnap.docs[0].id, ...nameSnap.docs[0].data() }
+          } else {
+            // Fallback: match displayName directly
+            const nameQ2 = query(collection(db, 'users'), where('displayName', '==', username), limit(1))
+            const nameSnap2 = await getDocs(nameQ2)
+            if (!nameSnap2.empty) p = { id: nameSnap2.docs[0].id, ...nameSnap2.docs[0].data() }
+          }
         }
 
         if (!p && isMe && user) {

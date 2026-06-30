@@ -1,9 +1,9 @@
-import { useState, useRef } from 'react'
+import { useState, useRef, useEffect } from 'react'
 import { addDoc, collection, serverTimestamp, doc, updateDoc, increment } from 'firebase/firestore'
 import { db } from '../firebase'
 import { uploadMedia } from '../lib/cloudinary'
 import { useAuth } from '../context/AuthContext'
-import { Image, Video, X, Tag, Loader2, Music } from 'lucide-react'
+import { Image, Video, X, Tag, Loader2, Music, Play, Pause } from 'lucide-react'
 import toast from 'react-hot-toast'
 
 const MAX_CHARS = 280
@@ -12,6 +12,45 @@ const MAX_VIDEO_MB = 100
 const MAX_AUDIO_MB = 50
 const MAX_IMAGES = 4
 
+function formatTime(s) {
+  const m = Math.floor(s / 60)
+  return `${m}:${String(Math.floor(s % 60)).padStart(2, '0')}`
+}
+
+async function trimAudioFile(file, startSec, endSec) {
+  const ctx = new AudioContext()
+  const buf = await ctx.decodeAudioData(await file.arrayBuffer())
+  const sr = buf.sampleRate
+  const s0 = Math.floor(startSec * sr)
+  const s1 = Math.floor(endSec * sr)
+  const len = s1 - s0
+  const out = ctx.createBuffer(buf.numberOfChannels, len, sr)
+  for (let c = 0; c < buf.numberOfChannels; c++) {
+    out.getChannelData(c).set(buf.getChannelData(c).subarray(s0, s1))
+  }
+  // Encode to WAV
+  const numCh = out.numberOfChannels
+  const pcmLen = len * numCh * 2
+  const ab = new ArrayBuffer(44 + pcmLen)
+  const view = new DataView(ab)
+  const write = (o, s) => { for (let i = 0; i < s.length; i++) view.setUint8(o + i, s.charCodeAt(i)) }
+  write(0, 'RIFF'); view.setUint32(4, 36 + pcmLen, true); write(8, 'WAVE')
+  write(12, 'fmt '); view.setUint32(16, 16, true); view.setUint16(20, 1, true)
+  view.setUint16(22, numCh, true); view.setUint32(24, sr, true)
+  view.setUint32(28, sr * numCh * 2, true); view.setUint16(32, numCh * 2, true)
+  view.setUint16(34, 16, true); write(36, 'data'); view.setUint32(40, pcmLen, true)
+  let offset = 44
+  for (let i = 0; i < len; i++) {
+    for (let c = 0; c < numCh; c++) {
+      const s = Math.max(-1, Math.min(1, out.getChannelData(c)[i]))
+      view.setInt16(offset, s < 0 ? s * 0x8000 : s * 0x7fff, true)
+      offset += 2
+    }
+  }
+  await ctx.close()
+  return new File([ab], 'clip.wav', { type: 'audio/wav' })
+}
+
 export default function ComposeBox({ onPost, replyTo = null, autoFocus = false }) {
   const { user, profile } = useAuth()
   const [content, setContent] = useState('')
@@ -19,12 +58,17 @@ export default function ComposeBox({ onPost, replyTo = null, autoFocus = false }
   const [videoFile, setVideoFile] = useState(null)
   const [videoPreview, setVideoPreview] = useState(null)
   const [audioFile, setAudioFile] = useState(null)
+  const [audioDuration, setAudioDuration] = useState(0)
+  const [trimStart, setTrimStart] = useState(0)
+  const [trimEnd, setTrimEnd] = useState(0)
+  const [previewing, setPreviewing] = useState(false)
   const [tagInput, setTagInput] = useState('')
   const [loading, setLoading] = useState(false)
   const [uploading, setUploading] = useState(false)
   const imageRef = useRef(null)
   const videoRef = useRef(null)
   const audioRef = useRef(null)
+  const previewAudioRef = useRef(null)
 
   const remaining = MAX_CHARS - content.length
   const canPost = content.trim().length > 0 || images.length > 0 || videoFile || audioFile
@@ -58,8 +102,34 @@ export default function ComposeBox({ onPost, replyTo = null, autoFocus = false }
     const file = e.target.files[0]
     if (!file) return
     if (file.size > MAX_AUDIO_MB * 1024 * 1024) return toast.error(`Audio must be under ${MAX_AUDIO_MB}MB`)
+    const url = URL.createObjectURL(file)
+    const tmp = new Audio(url)
+    tmp.onloadedmetadata = () => {
+      const dur = tmp.duration
+      setAudioDuration(dur)
+      setTrimStart(0)
+      setTrimEnd(dur)
+    }
     setAudioFile(file)
     e.target.value = ''
+  }
+
+  function previewClip() {
+    if (!audioFile) return
+    if (previewing && previewAudioRef.current) {
+      previewAudioRef.current.pause()
+      setPreviewing(false)
+      return
+    }
+    const url = URL.createObjectURL(audioFile)
+    const a = new Audio(url)
+    previewAudioRef.current = a
+    a.currentTime = trimStart
+    a.play()
+    setPreviewing(true)
+    const stop = () => setPreviewing(false)
+    a.addEventListener('ended', stop)
+    setTimeout(() => { a.pause(); setPreviewing(false) }, (trimEnd - trimStart) * 1000)
   }
 
   function clearVideo() {
@@ -99,10 +169,12 @@ export default function ComposeBox({ onPost, replyTo = null, autoFocus = false }
         mediaType = 'image'
       }
 
-      // Upload audio
+      // Upload audio (trimmed if needed)
       let audioUrl = null
       if (audioFile) {
-        const result = await uploadMedia(audioFile)
+        const isFullClip = trimStart === 0 && Math.abs(trimEnd - audioDuration) < 0.5
+        const fileToUpload = isFullClip ? audioFile : await trimAudioFile(audioFile, trimStart, trimEnd)
+        const result = await uploadMedia(fileToUpload)
         audioUrl = result.url
       }
 
@@ -205,14 +277,44 @@ export default function ComposeBox({ onPost, replyTo = null, autoFocus = false }
           </div>
         )}
 
-        {/* Audio indicator */}
+        {/* Audio trimmer */}
         {audioFile && (
-          <div className="mt-2 flex items-center gap-2 bg-slate-800 rounded-xl px-3 py-2">
-            <Music size={14} className="text-sky-400 shrink-0" />
-            <span className="text-xs text-slate-300 truncate flex-1">{audioFile.name}</span>
-            <button type="button" onClick={() => setAudioFile(null)} className="text-slate-500 hover:text-white">
-              <X size={13} />
-            </button>
+          <div className="mt-2 bg-slate-800 rounded-xl px-3 py-3 space-y-2">
+            <div className="flex items-center gap-2">
+              <Music size={14} className="text-sky-400 shrink-0" />
+              <span className="text-xs text-slate-300 truncate flex-1">{audioFile.name}</span>
+              <button type="button" onClick={previewClip} className="text-sky-400 hover:text-sky-300">
+                {previewing ? <Pause size={14} /> : <Play size={14} />}
+              </button>
+              <button type="button" onClick={() => { setAudioFile(null); setPreviewing(false) }} className="text-slate-500 hover:text-white">
+                <X size={13} />
+              </button>
+            </div>
+            {audioDuration > 0 && (
+              <div className="space-y-1.5">
+                <div className="flex items-center gap-2">
+                  <span className="text-[10px] text-slate-500 w-10">Start</span>
+                  <input
+                    type="range" min={0} max={audioDuration} step={0.1}
+                    value={trimStart}
+                    onChange={e => setTrimStart(Math.min(+e.target.value, trimEnd - 0.5))}
+                    className="flex-1 accent-sky-500 h-1"
+                  />
+                  <span className="text-[10px] text-slate-400 w-10 text-right">{formatTime(trimStart)}</span>
+                </div>
+                <div className="flex items-center gap-2">
+                  <span className="text-[10px] text-slate-500 w-10">End</span>
+                  <input
+                    type="range" min={0} max={audioDuration} step={0.1}
+                    value={trimEnd}
+                    onChange={e => setTrimEnd(Math.max(+e.target.value, trimStart + 0.5))}
+                    className="flex-1 accent-sky-500 h-1"
+                  />
+                  <span className="text-[10px] text-slate-400 w-10 text-right">{formatTime(trimEnd)}</span>
+                </div>
+                <p className="text-[10px] text-slate-500 text-right">Clip: {formatTime(trimEnd - trimStart)}</p>
+              </div>
+            )}
           </div>
         )}
 
