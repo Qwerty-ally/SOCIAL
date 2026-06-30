@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from 'react'
-import { collection, query, where, orderBy, onSnapshot, addDoc, serverTimestamp, Timestamp } from 'firebase/firestore'
+import { collection, query, where, orderBy, onSnapshot, addDoc, serverTimestamp, Timestamp, deleteDoc, doc } from 'firebase/firestore'
 import { db } from '../firebase'
 import { useAuth } from '../context/AuthContext'
 import { uploadMedia } from '../lib/cloudinary'
@@ -93,13 +93,14 @@ export default function StoriesBar() {
           gi={viewing.gi}
           si={viewing.si}
           onClose={() => setViewing(null)}
+          currentUserId={user?.uid}
         />
       )}
     </>
   )
 }
 
-function StoryViewer({ groups, gi: initGi, si: initSi, onClose }) {
+function StoryViewer({ groups, gi: initGi, si: initSi, onClose, currentUserId }) {
   const [gi, setGi] = useState(initGi)
   const [si, setSi] = useState(initSi)
   const [progress, setProgress] = useState(0)
@@ -162,6 +163,17 @@ function StoryViewer({ groups, gi: initGi, si: initSi, onClose }) {
           <span className="text-white/60 text-xs ml-auto">
             {story.createdAt?.toDate ? new Date(story.createdAt.toDate()).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : ''}
           </span>
+          {story.authorId === currentUserId && (
+            <button
+              onClick={async () => {
+                await deleteDoc(doc(db, 'stories', story.id))
+                advance()
+              }}
+              className="text-red-400 hover:text-red-300 ml-1 text-xs font-semibold px-2 py-0.5 rounded-full bg-black/40"
+            >
+              Delete
+            </button>
+          )}
           <button onClick={onClose} className="text-white/80 hover:text-white ml-1"><X size={20} /></button>
         </div>
 
