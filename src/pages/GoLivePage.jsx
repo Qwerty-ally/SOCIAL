@@ -76,26 +76,19 @@ export default function GoLivePage() {
     const pc = new RTCPeerConnection(ICE)
     peerConns.current[viewerId] = pc
 
-    localStream.current.getTracks().forEach(t => pc.addTrack(t, localStream.current))
-
-    // Boost bitrate — this is what prevents blurry video
-    pc.onnegotiationneeded = async () => {
-      pc.getSenders().forEach(sender => {
-        if (sender.track?.kind === 'video') {
-          const params = sender.getParameters()
-          if (!params.encodings) params.encodings = [{}]
-          params.encodings[0].maxBitrate = 20_000_000 // 20 Mbps
-          params.encodings[0].maxFramerate = 60
-          sender.setParameters(params).catch(() => {})
-        }
-        if (sender.track?.kind === 'audio') {
-          const params = sender.getParameters()
-          if (!params.encodings) params.encodings = [{}]
-          params.encodings[0].maxBitrate = 320_000 // 320 kbps audio
-          sender.setParameters(params).catch(() => {})
-        }
-      })
-    }
+    localStream.current.getTracks().forEach(t => {
+      if (t.kind === 'video') {
+        pc.addTransceiver(t, {
+          streams: [localStream.current],
+          sendEncodings: [{ maxBitrate: 20_000_000, maxFramerate: 60 }],
+        })
+      } else {
+        pc.addTransceiver(t, {
+          streams: [localStream.current],
+          sendEncodings: [{ maxBitrate: 320_000 }],
+        })
+      }
+    })
 
     pc.onicecandidate = async e => {
       if (e.candidate) {
