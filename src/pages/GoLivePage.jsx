@@ -22,7 +22,10 @@ export default function GoLivePage() {
   const unsubs = useRef([])
 
   useEffect(() => {
-    navigator.mediaDevices.getUserMedia({ video: true, audio: true })
+    navigator.mediaDevices.getUserMedia({
+        video: { width: { ideal: 1280 }, height: { ideal: 720 }, frameRate: { ideal: 30 } },
+        audio: true,
+      })
       .then(stream => {
         localStream.current = stream
         if (videoRef.current) videoRef.current.srcObject = stream
