@@ -64,7 +64,7 @@ function AppRoutes() {
       <Route path="/messages" element={<ProtectedRoute><Layout><FanGuard><MessagesPage /></FanGuard></Layout></ProtectedRoute>} />
       <Route path="/bookmarks" element={<ProtectedRoute><Layout><BookmarksPage /></Layout></ProtectedRoute>} />
       <Route path="/compose" element={<ProtectedRoute><Layout><ComposePage /></Layout></ProtectedRoute>} />
-      <Route path="/live" element={<ProtectedRoute><Layout><GoLivePage /></Layout></ProtectedRoute>} />
+      <Route path="/live" element={<ProtectedRoute><Layout><FanGuard><GoLivePage /></FanGuard></Layout></ProtectedRoute>} />
       <Route path="/watch/:streamId" element={<ProtectedRoute><Layout><WatchLivePage /></Layout></ProtectedRoute>} />
       <Route path="/post/:id" element={<ProtectedRoute><Layout><PostPage /></Layout></ProtectedRoute>} />
       <Route path="/profile/:username" element={<ProtectedRoute><Layout><ProfilePage /></Layout></ProtectedRoute>} />
