@@ -16,6 +16,7 @@ export default function GoLivePage() {
   const [micOn, setMicOn] = useState(true)
   const [camOn, setCamOn] = useState(true)
   const [viewerCount, setViewerCount] = useState(0)
+  const [activeStreamId, setActiveStreamId] = useState(null)
   const videoRef = useRef(null)
   const localStream = useRef(null)
   const streamId = useRef(null)
@@ -48,6 +49,7 @@ export default function GoLivePage() {
         startedAt: serverTimestamp(),
       })
       streamId.current = ref.id
+      setActiveStreamId(ref.id)
       setPhase('live')
       toast.success('You are live!')
 
@@ -173,9 +175,9 @@ export default function GoLivePage() {
       </div>
 
       {/* Chat — only visible during live */}
-      {phase === 'live' && streamId.current && (
+      {phase === 'live' && activeStreamId && (
         <div className="w-full lg:w-80 h-64 lg:h-auto">
-          <StreamChat streamId={streamId.current} />
+          <StreamChat streamId={activeStreamId} />
         </div>
       )}
     </div>
