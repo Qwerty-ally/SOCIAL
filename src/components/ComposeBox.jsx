@@ -3,48 +3,68 @@ import { addDoc, collection, serverTimestamp, doc, updateDoc, increment } from '
 import { db } from '../firebase'
 import { uploadMedia } from '../lib/cloudinary'
 import { useAuth } from '../context/AuthContext'
-import { Image, Video, X, Tag, Loader2 } from 'lucide-react'
+import { Image, Video, X, Tag, Loader2, Music } from 'lucide-react'
 import toast from 'react-hot-toast'
 
 const MAX_CHARS = 280
 const MAX_IMAGE_MB = 10
 const MAX_VIDEO_MB = 100
+const MAX_AUDIO_MB = 50
+const MAX_IMAGES = 4
 
 export default function ComposeBox({ onPost, replyTo = null, autoFocus = false }) {
   const { user, profile } = useAuth()
   const [content, setContent] = useState('')
-  const [mediaFile, setMediaFile] = useState(null)
-  const [mediaPreview, setMediaPreview] = useState(null)
-  const [mediaType, setMediaType] = useState(null) // 'image' | 'video'
+  const [images, setImages] = useState([]) // [{ file, preview }]
+  const [videoFile, setVideoFile] = useState(null)
+  const [videoPreview, setVideoPreview] = useState(null)
+  const [audioFile, setAudioFile] = useState(null)
   const [tagInput, setTagInput] = useState('')
   const [loading, setLoading] = useState(false)
   const [uploading, setUploading] = useState(false)
   const imageRef = useRef(null)
   const videoRef = useRef(null)
+  const audioRef = useRef(null)
 
   const remaining = MAX_CHARS - content.length
-  const canPost = content.trim().length > 0 || mediaFile
+  const canPost = content.trim().length > 0 || images.length > 0 || videoFile || audioFile
 
-  function pickFile(e, type) {
-    const file = e.target.files[0]
-    if (!file) return
-
-    const maxMB = type === 'video' ? MAX_VIDEO_MB : MAX_IMAGE_MB
-    if (file.size > maxMB * 1024 * 1024) {
-      toast.error(`${type === 'video' ? 'Video' : 'Image'} must be under ${maxMB} MB`)
-      return
-    }
-
-    setMediaFile(file)
-    setMediaType(type)
-    setMediaPreview(URL.createObjectURL(file))
+  function pickImages(e) {
+    const files = Array.from(e.target.files)
+    const valid = files.filter(f => {
+      if (f.size > MAX_IMAGE_MB * 1024 * 1024) { toast.error(`${f.name} is over ${MAX_IMAGE_MB}MB`); return false }
+      return true
+    })
+    const slots = MAX_IMAGES - images.length
+    const picked = valid.slice(0, slots)
+    if (valid.length > slots) toast.error(`Max ${MAX_IMAGES} photos`)
+    setImages(prev => [...prev, ...picked.map(f => ({ file: f, preview: URL.createObjectURL(f) }))])
+    e.target.value = ''
   }
 
-  function clearMedia() {
-    setMediaFile(null)
-    setMediaPreview(null)
-    setMediaType(null)
-    if (imageRef.current) imageRef.current.value = ''
+  function removeImage(i) {
+    setImages(prev => prev.filter((_, idx) => idx !== i))
+  }
+
+  function pickVideo(e) {
+    const file = e.target.files[0]
+    if (!file) return
+    if (file.size > MAX_VIDEO_MB * 1024 * 1024) return toast.error(`Video must be under ${MAX_VIDEO_MB}MB`)
+    setVideoFile(file)
+    setVideoPreview(URL.createObjectURL(file))
+  }
+
+  function pickAudio(e) {
+    const file = e.target.files[0]
+    if (!file) return
+    if (file.size > MAX_AUDIO_MB * 1024 * 1024) return toast.error(`Audio must be under ${MAX_AUDIO_MB}MB`)
+    setAudioFile(file)
+    e.target.value = ''
+  }
+
+  function clearVideo() {
+    setVideoFile(null)
+    setVideoPreview(null)
     if (videoRef.current) videoRef.current.value = ''
   }
 
@@ -59,25 +79,42 @@ export default function ComposeBox({ onPost, replyTo = null, autoFocus = false }
     if (!canPost || !user) return
     if (remaining < 0) return toast.error('Post is too long')
     setLoading(true)
+    setUploading(true)
 
     try {
-      let mediaUrl = null
-      let uploadedType = null
+      // Upload images
+      const mediaUrls = images.length > 0
+        ? await Promise.all(images.map(img => uploadMedia(img.file).then(r => r.url)))
+        : []
 
-      if (mediaFile) {
-        setUploading(true)
-        const result = await uploadMedia(mediaFile)
+      // Upload video
+      let mediaUrl = null
+      let mediaType = null
+      if (videoFile) {
+        const result = await uploadMedia(videoFile)
         mediaUrl = result.url
-        uploadedType = result.type
-        setUploading(false)
+        mediaType = 'video'
+      } else if (mediaUrls.length > 0) {
+        mediaUrl = mediaUrls[0]
+        mediaType = 'image'
       }
+
+      // Upload audio
+      let audioUrl = null
+      if (audioFile) {
+        const result = await uploadMedia(audioFile)
+        audioUrl = result.url
+      }
+
+      setUploading(false)
 
       const data = {
         content: content.trim(),
         mediaUrl,
-        mediaType: uploadedType,
-        // keep imageUrl populated for backwards compat with existing posts
-        imageUrl: uploadedType === 'image' ? mediaUrl : null,
+        mediaType,
+        imageUrl: mediaType === 'image' ? mediaUrl : null,
+        mediaUrls: mediaUrls.length > 0 ? mediaUrls : null,
+        audioUrl,
         tags: parseTags(content),
         authorId: user.uid,
         authorName: profile?.displayName || user.displayName || 'Unknown',
@@ -101,7 +138,9 @@ export default function ComposeBox({ onPost, replyTo = null, autoFocus = false }
       }
 
       setContent('')
-      clearMedia()
+      setImages([])
+      clearVideo()
+      setAudioFile(null)
       setTagInput('')
       onPost?.()
       toast.success(replyTo ? 'Reply posted!' : 'Posted!')
@@ -137,30 +176,43 @@ export default function ComposeBox({ onPost, replyTo = null, autoFocus = false }
           maxLength={MAX_CHARS + 50}
         />
 
-        {/* Media preview */}
-        {mediaPreview && (
+        {/* Image grid preview */}
+        {images.length > 0 && (
+          <div className={`mt-2 grid gap-1 rounded-xl overflow-hidden ${images.length > 1 ? 'grid-cols-2' : 'grid-cols-1'}`}>
+            {images.map((img, i) => (
+              <div key={i} className="relative">
+                <img src={img.preview} alt="" className="w-full object-cover max-h-48 rounded-lg" />
+                <button
+                  type="button"
+                  onClick={() => removeImage(i)}
+                  className="absolute top-1.5 right-1.5 bg-black/70 rounded-full p-1 text-white hover:bg-black"
+                >
+                  <X size={13} />
+                </button>
+              </div>
+            ))}
+          </div>
+        )}
+
+        {/* Video preview */}
+        {videoPreview && (
           <div className="relative mt-2 inline-block max-w-full">
-            {mediaType === 'video' ? (
-              <video
-                src={mediaPreview}
-                controls
-                className="rounded-xl max-h-52 max-w-full border border-slate-700"
-              />
-            ) : (
-              <img src={mediaPreview} alt="" className="rounded-xl max-h-52 object-cover border border-slate-700" />
-            )}
-            <button
-              type="button"
-              onClick={clearMedia}
-              className="absolute top-1.5 right-1.5 bg-black/70 rounded-full p-1 text-white hover:bg-black"
-            >
+            <video src={videoPreview} controls className="rounded-xl max-h-52 max-w-full border border-slate-700" />
+            <button type="button" onClick={clearVideo} className="absolute top-1.5 right-1.5 bg-black/70 rounded-full p-1 text-white hover:bg-black">
               <X size={14} />
             </button>
-            {mediaType === 'video' && (
-              <span className="absolute bottom-1.5 left-1.5 bg-black/70 text-white text-[10px] px-2 py-0.5 rounded-full font-medium">
-                VIDEO
-              </span>
-            )}
+            <span className="absolute bottom-1.5 left-1.5 bg-black/70 text-white text-[10px] px-2 py-0.5 rounded-full font-medium">VIDEO</span>
+          </div>
+        )}
+
+        {/* Audio indicator */}
+        {audioFile && (
+          <div className="mt-2 flex items-center gap-2 bg-slate-800 rounded-xl px-3 py-2">
+            <Music size={14} className="text-sky-400 shrink-0" />
+            <span className="text-xs text-slate-300 truncate flex-1">{audioFile.name}</span>
+            <button type="button" onClick={() => setAudioFile(null)} className="text-slate-500 hover:text-white">
+              <X size={13} />
+            </button>
           </div>
         )}
 
@@ -177,10 +229,12 @@ export default function ComposeBox({ onPost, replyTo = null, autoFocus = false }
 
         <div className="flex items-center justify-between mt-3">
           <div className="flex items-center gap-1">
-            <input type="file" ref={imageRef} accept="image/*" onChange={e => pickFile(e, 'image')} className="hidden" />
-            <input type="file" ref={videoRef} accept="video/*" onChange={e => pickFile(e, 'video')} className="hidden" />
-            <ToolBtn icon={<Image size={18} />} onClick={() => imageRef.current.click()} label="Image" disabled={!!mediaFile} />
-            <ToolBtn icon={<Video size={18} />} onClick={() => videoRef.current.click()} label="Video" disabled={!!mediaFile} />
+            <input type="file" ref={imageRef} accept="image/*" multiple onChange={pickImages} className="hidden" />
+            <input type="file" ref={videoRef} accept="video/*" onChange={pickVideo} className="hidden" />
+            <input type="file" ref={audioRef} accept="audio/*" onChange={pickAudio} className="hidden" />
+            <ToolBtn icon={<Image size={18} />} onClick={() => imageRef.current.click()} label="Photos" disabled={!!videoFile || images.length >= MAX_IMAGES} />
+            <ToolBtn icon={<Video size={18} />} onClick={() => videoRef.current.click()} label="Video" disabled={images.length > 0 || !!videoFile} />
+            <ToolBtn icon={<Music size={18} />} onClick={() => audioRef.current.click()} label="Audio" disabled={!!audioFile} />
           </div>
 
           <div className="flex items-center gap-3">

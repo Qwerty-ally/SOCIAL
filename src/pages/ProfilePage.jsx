@@ -42,7 +42,14 @@ export default function ProfilePage() {
 
         if (!snap.empty) {
           p = { id: snap.docs[0].id, ...snap.docs[0].data() }
-        } else if (isMe && user) {
+        } else {
+          // Try matching by display name (case-insensitive)
+          const nameQ = query(collection(db, 'users'), where('displayNameLower', '==', username.toLowerCase()), limit(1))
+          const nameSnap = await getDocs(nameQ)
+          if (!nameSnap.empty) p = { id: nameSnap.docs[0].id, ...nameSnap.docs[0].data() }
+        }
+
+        if (!p && isMe && user) {
           // Fallback: load own profile by UID (username might differ in URL vs Firestore)
           const ownSnap = await getDoc(doc(db, 'users', user.uid))
           if (ownSnap.exists()) p = { id: ownSnap.id, ...ownSnap.data() }

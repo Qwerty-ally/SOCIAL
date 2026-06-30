@@ -3,7 +3,8 @@ const UPLOAD_PRESET = 'hiiiiiiiii'
 
 export async function uploadMedia(file) {
   const isVideo = file.type.startsWith('video/')
-  const endpoint = isVideo ? 'video' : 'image'
+  const isAudio = file.type.startsWith('audio/')
+  const endpoint = (isVideo || isAudio) ? 'video' : 'image'
 
   const form = new FormData()
   form.append('file', file)
@@ -20,7 +21,7 @@ export async function uploadMedia(file) {
   }
 
   const data = await res.json()
-  return { url: data.secure_url, type: isVideo ? 'video' : 'image' }
+  return { url: data.secure_url, type: isVideo ? 'video' : isAudio ? 'audio' : 'image' }
 }
 
 // Keep old name working for profile pic uploads

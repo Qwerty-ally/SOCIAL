@@ -163,21 +163,25 @@ export default function PostCard({ post, onDelete }) {
           <p className="mt-1.5 text-sm text-slate-200 whitespace-pre-wrap leading-relaxed">{post.content}</p>
 
           {/* Media */}
-          {(post.mediaUrl || post.imageUrl) && (
+          {post.mediaUrls?.length > 0 ? (
+            <div className={`mt-3 grid gap-1 rounded-xl overflow-hidden ${post.mediaUrls.length > 1 ? 'grid-cols-2' : 'grid-cols-1'}`} onClick={e => e.stopPropagation()}>
+              {post.mediaUrls.map((url, i) => (
+                <img key={i} src={url} alt="" className="w-full object-cover max-h-64" />
+              ))}
+            </div>
+          ) : (post.mediaUrl || post.imageUrl) ? (
             post.mediaType === 'video' ? (
-              <video
-                src={post.mediaUrl}
-                controls
-                onClick={e => e.stopPropagation()}
-                className="mt-3 rounded-xl max-h-80 w-full border border-slate-700 bg-black"
-              />
+              <video src={post.mediaUrl} controls onClick={e => e.stopPropagation()} className="mt-3 rounded-xl max-h-80 w-full border border-slate-700 bg-black" />
             ) : (
-              <img
-                src={post.mediaUrl || post.imageUrl}
-                alt=""
-                className="mt-3 rounded-xl max-h-80 w-full object-cover border border-slate-700"
-              />
+              <img src={post.mediaUrl || post.imageUrl} alt="" className="mt-3 rounded-xl max-h-80 w-full object-cover border border-slate-700" />
             )
+          ) : null}
+
+          {/* Audio */}
+          {post.audioUrl && (
+            <audio controls onClick={e => e.stopPropagation()} className="mt-3 w-full h-10 rounded-xl">
+              <source src={post.audioUrl} />
+            </audio>
           )}
 
           {/* Tags */}
