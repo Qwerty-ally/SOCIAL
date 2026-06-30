@@ -127,7 +127,10 @@ export default function ProfilePage() {
     setSavingEdit(true)
     try {
       const updates = {}
-      if (renameForm.displayName.trim()) updates.displayName = renameForm.displayName.trim()
+      if (renameForm.displayName.trim()) {
+        updates.displayName = renameForm.displayName.trim()
+        updates.displayNameLower = renameForm.displayName.trim().toLowerCase()
+      }
       if (renameForm.username.trim()) updates.username = renameForm.username.trim().toLowerCase().replace(/\s+/g, '_')
       await updateDoc(doc(db, 'users', profile.id), updates)
       setLocalProfile(prev => ({ ...prev, ...updates }))

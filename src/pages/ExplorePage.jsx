@@ -37,11 +37,11 @@ export default function ExplorePage() {
     const usersSnap = await getDocs(usersQ)
     const byUsername = usersSnap.docs.map(d => ({ id: d.id, ...d.data(), _type: 'user' }))
 
-    // Search users by display name
+    // Search users by display name (case-insensitive)
     const namesQ = query(
       collection(db, 'users'),
-      where('displayName', '>=', searchQ),
-      where('displayName', '<=', searchQ + ''),
+      where('displayNameLower', '>=', searchQ.toLowerCase()),
+      where('displayNameLower', '<=', searchQ.toLowerCase() + ''),
       limit(5)
     )
     const namesSnap = await getDocs(namesQ)

@@ -45,6 +45,7 @@ export default function AuthPage() {
           uid: user.uid,
           username,
           displayName,
+          displayNameLower: displayName.toLowerCase(),
           email: form.email,
           bio: isOwner ? 'The official ANCHOR account. Welcome to the global group.' : '',
           avatar: isOwner
