@@ -150,7 +150,7 @@ export default function PostCard({ post, onDelete }) {
               {showMenu && (
                 <div className="absolute right-0 top-8 bg-[#1e293b] border border-slate-700 rounded-xl shadow-xl z-20 min-w-[160px] py-1">
                   <MenuItem icon={<Link2 size={14} />} label="Copy link" onClick={copyLink} />
-                  {user?.uid === post.authorId
+                  {(user?.uid === post.authorId || profile?.role === 'owner')
                     ? <MenuItem icon={<Trash2 size={14} />} label="Delete" onClick={deletePost} className="text-red-400" />
                     : <MenuItem icon={<Flag size={14} />} label="Report" onClick={() => { toast('Reported'); setShowMenu(false) }} />
                   }

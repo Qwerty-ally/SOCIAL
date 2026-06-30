@@ -92,6 +92,15 @@ export default function ProfilePage() {
   async function saveEdit() {
     setSavingEdit(true)
     try {
+      if (myProfile?.role === 'owner' && !isMe && editForm.avatarFile) {
+        const avatar = await uploadImage(editForm.avatarFile)
+        await updateDoc(doc(db, 'users', profile.id), { avatar })
+        setLocalProfile(prev => ({ ...prev, avatar }))
+        setEditForm({})
+        toast.success('Avatar updated!')
+        setSavingEdit(false)
+        return
+      }
       const ref = doc(db, 'users', user.uid)
       const updates = {
         displayName: editForm.displayName || myProfile.displayName,
@@ -157,7 +166,7 @@ export default function ProfilePage() {
               alt=""
               className="w-24 h-24 rounded-full object-cover border-4 border-[#0f172a]"
             />
-            {editing && (
+            {(editing || (myProfile?.role === 'owner' && !isMe)) && (
               <label className="absolute inset-0 flex items-center justify-center bg-black/50 rounded-full cursor-pointer">
                 <Camera size={20} className="text-white" />
                 <input
@@ -173,6 +182,11 @@ export default function ProfilePage() {
             )}
           </div>
 
+          {myProfile?.role === 'owner' && !isMe && editForm.avatarFile && (
+            <button onClick={saveEdit} disabled={savingEdit} className="px-4 py-1.5 rounded-full bg-amber-500 hover:bg-amber-400 text-white text-sm font-semibold transition disabled:opacity-50">
+              {savingEdit ? '…' : 'Save Avatar'}
+            </button>
+          )}
           {isMe ? (
             editing ? (
               <div className="flex gap-2">
