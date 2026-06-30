@@ -5,6 +5,7 @@ import { db } from '../firebase'
 import { useAuth } from '../context/AuthContext'
 import { Users, ArrowLeft, Loader2 } from 'lucide-react'
 import toast from 'react-hot-toast'
+import StreamChat from '../components/StreamChat'
 
 const ICE = { iceServers: [{ urls: ['stun:stun1.l.google.com:19302', 'stun:stun2.l.google.com:19302'] }] }
 
@@ -105,35 +106,43 @@ export default function WatchLivePage() {
   )
 
   return (
-    <div className="p-4">
-      <div className="flex items-center gap-3 mb-4">
-        <button onClick={() => navigate(-1)} className="p-1.5 rounded-full hover:bg-slate-800 text-slate-400 hover:text-white transition">
-          <ArrowLeft size={20} />
-        </button>
-        {streamData && (
-          <Link to={`/profile/${streamData.hostUsername}`} className="flex items-center gap-2 hover:opacity-80 transition">
-            <img src={streamData.hostAvatar} alt="" className="w-9 h-9 rounded-full object-cover" />
-            <div>
-              <p className="text-white font-semibold text-sm">{streamData.hostName}</p>
-              <div className="flex items-center gap-1 text-xs text-slate-400">
-                <Users size={10} /> {streamData.viewerCount ?? 0} watching
+    <div className="flex flex-col lg:flex-row gap-4 p-4 h-[calc(100dvh-4rem)]">
+      {/* Video */}
+      <div className="flex flex-col flex-1 min-w-0">
+        <div className="flex items-center gap-3 mb-3">
+          <button onClick={() => navigate(-1)} className="p-1.5 rounded-full hover:bg-slate-800 text-slate-400 hover:text-white transition">
+            <ArrowLeft size={20} />
+          </button>
+          {streamData && (
+            <Link to={`/profile/${streamData.hostUsername}`} className="flex items-center gap-2 hover:opacity-80 transition">
+              <img src={streamData.hostAvatar} alt="" className="w-9 h-9 rounded-full object-cover" />
+              <div>
+                <p className="text-white font-semibold text-sm">{streamData.hostName}</p>
+                <div className="flex items-center gap-1 text-xs text-slate-400">
+                  <Users size={10} /> {streamData.viewerCount ?? 0} watching
+                </div>
               </div>
+            </Link>
+          )}
+          <span className="ml-1 bg-red-500 text-white text-xs font-bold px-2 py-0.5 rounded-full flex items-center gap-1">
+            <span className="w-1.5 h-1.5 bg-white rounded-full animate-pulse" />LIVE
+          </span>
+        </div>
+
+        <div className="relative bg-black rounded-2xl overflow-hidden aspect-video w-full">
+          <video ref={videoRef} autoPlay playsInline className="w-full h-full object-cover" />
+          {!connected && (
+            <div className="absolute inset-0 flex flex-col items-center justify-center gap-3">
+              <Loader2 className="animate-spin text-sky-400" size={32} />
+              <p className="text-slate-400 text-sm">Connecting to stream…</p>
             </div>
-          </Link>
-        )}
-        <span className="ml-1 bg-red-500 text-white text-xs font-bold px-2 py-0.5 rounded-full flex items-center gap-1">
-          <span className="w-1.5 h-1.5 bg-white rounded-full animate-pulse" />LIVE
-        </span>
+          )}
+        </div>
       </div>
 
-      <div className="relative bg-black rounded-2xl overflow-hidden aspect-video">
-        <video ref={videoRef} autoPlay playsInline className="w-full h-full object-cover" />
-        {!connected && (
-          <div className="absolute inset-0 flex flex-col items-center justify-center gap-3">
-            <Loader2 className="animate-spin text-sky-400" size={32} />
-            <p className="text-slate-400 text-sm">Connecting to stream…</p>
-          </div>
-        )}
+      {/* Chat */}
+      <div className="w-full lg:w-80 h-64 lg:h-auto">
+        <StreamChat streamId={streamId} />
       </div>
     </div>
   )

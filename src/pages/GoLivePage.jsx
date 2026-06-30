@@ -5,6 +5,7 @@ import { useAuth } from '../context/AuthContext'
 import { useNavigate } from 'react-router-dom'
 import { Video, VideoOff, Mic, MicOff, PhoneOff, Users, Radio } from 'lucide-react'
 import toast from 'react-hot-toast'
+import StreamChat from '../components/StreamChat'
 
 const ICE = { iceServers: [{ urls: ['stun:stun1.l.google.com:19302', 'stun:stun2.l.google.com:19302'] }] }
 
@@ -123,50 +124,60 @@ export default function GoLivePage() {
   }
 
   return (
-    <div className="p-4 max-w-2xl mx-auto">
-      <div className="flex items-center gap-2 mb-4">
-        <Radio size={20} className="text-red-400" />
-        <h1 className="text-white font-bold text-lg">Go Live</h1>
-      </div>
+    <div className="flex flex-col lg:flex-row gap-4 p-4 h-[calc(100dvh-4rem)]">
+      {/* Video + controls */}
+      <div className="flex flex-col flex-1 min-w-0">
+        <div className="flex items-center gap-2 mb-3">
+          <Radio size={20} className="text-red-400" />
+          <h1 className="text-white font-bold text-lg">Go Live</h1>
+        </div>
 
-      <div className="relative bg-black rounded-2xl overflow-hidden aspect-video mb-4">
-        <video ref={videoRef} autoPlay muted playsInline className="w-full h-full object-cover" />
-        {!camOn && (
-          <div className="absolute inset-0 flex items-center justify-center bg-slate-900">
-            <VideoOff size={48} className="text-slate-600" />
-          </div>
-        )}
-        {phase === 'live' && (
-          <div className="absolute top-3 left-3 flex items-center gap-2">
-            <span className="bg-red-500 text-white text-xs font-bold px-2 py-1 rounded-full flex items-center gap-1.5">
-              <span className="w-1.5 h-1.5 bg-white rounded-full animate-pulse" />LIVE
-            </span>
-            <span className="bg-black/60 text-white text-xs px-2 py-1 rounded-full flex items-center gap-1">
-              <Users size={10} />{viewerCount}
-            </span>
-          </div>
-        )}
-      </div>
+        <div className="relative bg-black rounded-2xl overflow-hidden aspect-video w-full">
+          <video ref={videoRef} autoPlay muted playsInline className="w-full h-full object-cover" />
+          {!camOn && (
+            <div className="absolute inset-0 flex items-center justify-center bg-slate-900">
+              <VideoOff size={48} className="text-slate-600" />
+            </div>
+          )}
+          {phase === 'live' && (
+            <div className="absolute top-3 left-3 flex items-center gap-2">
+              <span className="bg-red-500 text-white text-xs font-bold px-2 py-1 rounded-full flex items-center gap-1.5">
+                <span className="w-1.5 h-1.5 bg-white rounded-full animate-pulse" />LIVE
+              </span>
+              <span className="bg-black/60 text-white text-xs px-2 py-1 rounded-full flex items-center gap-1">
+                <Users size={10} />{viewerCount}
+              </span>
+            </div>
+          )}
+        </div>
 
-      <div className="flex items-center justify-center gap-4">
-        <button onClick={toggleMic} className={`p-3.5 rounded-full transition ${micOn ? 'bg-slate-700 hover:bg-slate-600 text-white' : 'bg-red-500 text-white'}`}>
-          {micOn ? <Mic size={20} /> : <MicOff size={20} />}
-        </button>
-
-        {phase === 'setup' ? (
-          <button onClick={startLive} className="px-8 py-3 bg-red-500 hover:bg-red-400 text-white font-bold rounded-xl transition shadow-lg shadow-red-500/30">
-            Go Live
+        <div className="flex items-center justify-center gap-4 mt-4">
+          <button onClick={toggleMic} className={`p-3.5 rounded-full transition ${micOn ? 'bg-slate-700 hover:bg-slate-600 text-white' : 'bg-red-500 text-white'}`}>
+            {micOn ? <Mic size={20} /> : <MicOff size={20} />}
           </button>
-        ) : (
-          <button onClick={endLive} className="px-8 py-3 bg-red-600 hover:bg-red-700 text-white font-bold rounded-xl transition flex items-center gap-2">
-            <PhoneOff size={18} /> End Stream
-          </button>
-        )}
 
-        <button onClick={toggleCam} className={`p-3.5 rounded-full transition ${camOn ? 'bg-slate-700 hover:bg-slate-600 text-white' : 'bg-red-500 text-white'}`}>
-          {camOn ? <Video size={20} /> : <VideoOff size={20} />}
-        </button>
+          {phase === 'setup' ? (
+            <button onClick={startLive} className="px-8 py-3 bg-red-500 hover:bg-red-400 text-white font-bold rounded-xl transition shadow-lg shadow-red-500/30">
+              Go Live
+            </button>
+          ) : (
+            <button onClick={endLive} className="px-8 py-3 bg-red-600 hover:bg-red-700 text-white font-bold rounded-xl transition flex items-center gap-2">
+              <PhoneOff size={18} /> End Stream
+            </button>
+          )}
+
+          <button onClick={toggleCam} className={`p-3.5 rounded-full transition ${camOn ? 'bg-slate-700 hover:bg-slate-600 text-white' : 'bg-red-500 text-white'}`}>
+            {camOn ? <Video size={20} /> : <VideoOff size={20} />}
+          </button>
+        </div>
       </div>
+
+      {/* Chat — only visible during live */}
+      {phase === 'live' && streamId.current && (
+        <div className="w-full lg:w-80 h-64 lg:h-auto">
+          <StreamChat streamId={streamId.current} />
+        </div>
+      )}
     </div>
   )
 }
