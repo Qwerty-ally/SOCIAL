@@ -1,10 +1,11 @@
 import { useState, useEffect, useRef } from 'react'
-import { collection, query, orderBy, limit, onSnapshot, addDoc, serverTimestamp } from 'firebase/firestore'
+import { collection, query, orderBy, limit, onSnapshot, addDoc, serverTimestamp, doc, updateDoc, arrayUnion } from 'firebase/firestore'
 import { db } from '../firebase'
 import { useAuth } from '../context/AuthContext'
-import { Send, MessageCircle } from 'lucide-react'
+import { Send, MessageCircle, Ban } from 'lucide-react'
+import toast from 'react-hot-toast'
 
-export default function StreamChat({ streamId }) {
+export default function StreamChat({ streamId, isHost }) {
   const { user, profile } = useAuth()
   const [messages, setMessages] = useState([])
   const [text, setText] = useState('')
@@ -34,6 +35,12 @@ export default function StreamChat({ streamId }) {
     })
   }
 
+  async function blockUser(uid, displayName) {
+    if (!confirm(`Block ${displayName} from this stream?`)) return
+    await updateDoc(doc(db, 'streams', streamId), { blockedUsers: arrayUnion(uid) })
+    toast.success(`${displayName} has been blocked`)
+  }
+
   return (
     <div className="flex flex-col h-full bg-[#0f172a] rounded-2xl border border-slate-700/50 overflow-hidden">
       <div className="px-4 py-2.5 border-b border-slate-700/50 flex items-center gap-2 shrink-0">
@@ -46,16 +53,25 @@ export default function StreamChat({ streamId }) {
           <p className="text-center text-slate-600 text-xs py-4">No messages yet. Say something!</p>
         )}
         {messages.map(m => (
-          <div key={m.id} className="flex gap-2 items-start">
+          <div key={m.id} className="flex gap-2 items-start group">
             <img
               src={m.avatar || `https://api.dicebear.com/9.x/thumbs/svg?seed=${m.username}`}
               alt=""
               className="w-6 h-6 rounded-full object-cover shrink-0 mt-0.5"
             />
-            <div className="min-w-0">
+            <div className="flex-1 min-w-0">
               <span className="text-[11px] font-semibold text-sky-400 mr-1.5">{m.displayName}</span>
               <span className="text-[13px] text-slate-200 break-words">{m.text}</span>
             </div>
+            {isHost && m.uid !== user?.uid && (
+              <button
+                onClick={() => blockUser(m.uid, m.displayName)}
+                className="opacity-0 group-hover:opacity-100 p-1 rounded-full text-slate-600 hover:text-red-400 hover:bg-red-400/10 transition shrink-0"
+                title="Block from stream"
+              >
+                <Ban size={12} />
+              </button>
+            )}
           </div>
         ))}
         <div ref={bottomRef} />

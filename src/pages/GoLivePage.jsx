@@ -200,7 +200,7 @@ export default function GoLivePage() {
       {/* Chat — only visible during live */}
       {phase === 'live' && activeStreamId && (
         <div className="w-full lg:w-80 h-64 lg:h-auto">
-          <StreamChat streamId={activeStreamId} />
+          <StreamChat streamId={activeStreamId} isHost={true} />
         </div>
       )}
     </div>

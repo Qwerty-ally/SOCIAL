@@ -33,7 +33,13 @@ export default function WatchLivePage() {
         navigate('/')
         return
       }
-      setStreamData(snap.data())
+      const streamInfo = snap.data()
+      if (streamInfo?.blockedUsers?.includes(user.uid)) {
+        toast.error('You have been removed from this stream')
+        navigate('/')
+        return
+      }
+      setStreamData(streamInfo)
       setLoading(false)
 
       pc.current = new RTCPeerConnection(ICE)
@@ -76,11 +82,15 @@ export default function WatchLivePage() {
       })
       unsubs.current.push(unsub2)
 
-      // Listen for stream ending
+      // Listen for stream ending or being blocked
       const unsub3 = onSnapshot(doc(db, 'streams', streamId), snap => {
         if (snap.exists()) setStreamData(snap.data())
-        if (!snap.data()?.active) {
+        const data = snap.data()
+        if (!data?.active) {
           toast('Stream ended')
+          navigate('/')
+        } else if (data?.blockedUsers?.includes(user.uid)) {
+          toast.error('You have been removed from this stream')
           navigate('/')
         }
       })
