@@ -334,9 +334,16 @@ export default function ComposeBox({ onPost, replyTo = null, autoFocus = false }
             <input type="file" ref={imageRef} accept="image/*" multiple onChange={pickImages} className="hidden" />
             <input type="file" ref={videoRef} accept="video/*" onChange={pickVideo} className="hidden" />
             <input type="file" ref={audioRef} accept="audio/*" onChange={pickAudio} className="hidden" />
-            <ToolBtn icon={<Image size={18} />} onClick={() => imageRef.current.click()} label="Photos" disabled={!!videoFile || images.length >= MAX_IMAGES} />
-            <ToolBtn icon={<Video size={18} />} onClick={() => videoRef.current.click()} label="Video" disabled={images.length > 0 || !!videoFile} />
-            <ToolBtn icon={<Music size={18} />} onClick={() => audioRef.current.click()} label="Audio" disabled={!!audioFile} />
+            {/* Fans can only add images to posts, no media to comments */}
+            {!(profile?.role === 'fan' && replyTo) && (
+              <ToolBtn icon={<Image size={18} />} onClick={() => imageRef.current.click()} label="Photos" disabled={!!videoFile || images.length >= MAX_IMAGES || !!replyTo && profile?.role === 'fan'} />
+            )}
+            {profile?.role !== 'fan' && (
+              <>
+                <ToolBtn icon={<Video size={18} />} onClick={() => videoRef.current.click()} label="Video" disabled={images.length > 0 || !!videoFile} />
+                <ToolBtn icon={<Music size={18} />} onClick={() => audioRef.current.click()} label="Audio" disabled={!!audioFile} />
+              </>
+            )}
           </div>
 
           <div className="flex items-center gap-3">

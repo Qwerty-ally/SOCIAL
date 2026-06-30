@@ -6,7 +6,7 @@ import {
 } from 'firebase/auth'
 import { doc, setDoc, serverTimestamp } from 'firebase/firestore'
 import { auth, db } from '../firebase'
-import { Anchor, Mail, Lock, User, Eye, EyeOff, Shield, Users, KeyRound, Crown } from 'lucide-react'
+import { Anchor, Mail, Lock, User, Eye, EyeOff, Shield, Users, KeyRound, Crown, Star } from 'lucide-react'
 import toast from 'react-hot-toast'
 
 // Change this to whatever secret you want
@@ -14,7 +14,7 @@ const OWNER_CODE = 'ANCHOR#OFFICIAL'
 
 export default function AuthPage() {
   const [mode, setMode] = useState('login')
-  const [role, setRole] = useState('member') // 'member' | 'owner'
+  const [role, setRole] = useState('member') // 'member' | 'fan' | 'owner'
   const [showPass, setShowPass] = useState(false)
   const [showCode, setShowCode] = useState(false)
   const [loading, setLoading] = useState(false)
@@ -37,6 +37,7 @@ export default function AuthPage() {
 
         const { user } = await createUserWithEmailAndPassword(auth, form.email, form.password)
         const isOwner = role === 'owner'
+        const isFan = role === 'fan'
         const displayName = isOwner ? 'ANCHOR OFFICIAL' : (form.displayName || form.username)
         const username = isOwner ? 'anchor_official' : form.username.toLowerCase().replace(/\s+/g, '_')
 
@@ -51,13 +52,13 @@ export default function AuthPage() {
           avatar: isOwner
             ? `https://api.dicebear.com/9.x/shapes/svg?seed=anchor&backgroundColor=0ea5e9`
             : `https://api.dicebear.com/9.x/thumbs/svg?seed=${form.username}`,
-          role: isOwner ? 'owner' : 'member',
+          role: isOwner ? 'owner' : isFan ? 'fan' : 'member',
           followers: [],
           following: [],
           postCount: 0,
           createdAt: serverTimestamp(),
         })
-        toast.success(isOwner ? 'Welcome, ANCHOR Owner!' : 'Welcome to ANCHOR!')
+        toast.success(isOwner ? 'Welcome, ANCHOR Owner!' : isFan ? 'Welcome, Fan!' : 'Welcome to ANCHOR!')
       } else {
         await signInWithEmailAndPassword(auth, form.email, form.password)
         toast.success('Signed in!')
@@ -101,21 +102,29 @@ export default function AuthPage() {
           {mode === 'signup' && (
             <div className="mb-5">
               <p className="text-xs text-slate-500 font-semibold uppercase tracking-wider mb-2">Account Type</p>
-              <div className="grid grid-cols-2 gap-3">
+              <div className="grid grid-cols-3 gap-2">
                 <RoleCard
                   selected={role === 'member'}
                   onClick={() => setRole('member')}
-                  icon={<Users size={22} className="text-sky-400" />}
+                  icon={<Users size={20} className="text-sky-400" />}
                   title="Member"
-                  desc="Join the ANCHOR community as a regular member."
+                  desc="Post, comment & upload media."
                   color="sky"
+                />
+                <RoleCard
+                  selected={role === 'fan'}
+                  onClick={() => setRole('fan')}
+                  icon={<Star size={20} className="text-purple-400" />}
+                  title="Fan"
+                  desc="Like, follow, post & comment (text only)."
+                  color="purple"
                 />
                 <RoleCard
                   selected={role === 'owner'}
                   onClick={() => setRole('owner')}
-                  icon={<Crown size={22} className="text-amber-400" />}
+                  icon={<Crown size={20} className="text-amber-400" />}
                   title="Owner"
-                  desc="Control the ANCHOR OFFICIAL account. Requires a secret code."
+                  desc="ANCHOR OFFICIAL. Requires secret code."
                   color="amber"
                 />
               </div>
@@ -123,7 +132,7 @@ export default function AuthPage() {
           )}
 
           <form onSubmit={submit} className="space-y-4">
-            {mode === 'signup' && role === 'member' && (
+            {mode === 'signup' && (role === 'member' || role === 'fan') && (
               <>
                 <Field icon={<User size={16} />} name="displayName" placeholder="Display name" value={form.displayName} onChange={handle} />
                 <Field icon={<span className="text-slate-400 text-xs font-bold">@</span>} name="username" placeholder="Username (no spaces)" value={form.username} onChange={handle} required />
@@ -184,7 +193,9 @@ export default function AuthPage() {
               className={`w-full py-3 text-white rounded-xl font-semibold text-sm transition shadow-lg disabled:opacity-50 ${
                 mode === 'signup' && role === 'owner'
                   ? 'bg-amber-500 hover:bg-amber-400 shadow-amber-500/30'
-                  : 'bg-sky-500 hover:bg-sky-400 shadow-sky-500/30'
+                  : mode === 'signup' && role === 'fan'
+                    ? 'bg-purple-500 hover:bg-purple-400 shadow-purple-500/30'
+                    : 'bg-sky-500 hover:bg-sky-400 shadow-sky-500/30'
               }`}
             >
               {loading
@@ -193,7 +204,9 @@ export default function AuthPage() {
                   ? 'Sign In'
                   : role === 'owner'
                     ? 'Create Owner Account'
-                    : 'Join ANCHOR'}
+                    : role === 'fan'
+                      ? 'Join as Fan'
+                      : 'Join ANCHOR'}
             </button>
           </form>
         </div>
@@ -204,7 +217,7 @@ export default function AuthPage() {
 }
 
 function RoleCard({ selected, onClick, icon, title, desc, color }) {
-  const ring = color === 'amber' ? 'border-amber-400 bg-amber-400/10' : 'border-sky-400 bg-sky-400/10'
+  const ring = color === 'amber' ? 'border-amber-400 bg-amber-400/10' : color === 'purple' ? 'border-purple-400 bg-purple-400/10' : 'border-sky-400 bg-sky-400/10'
   const base = 'border-slate-700 bg-slate-800/50 hover:border-slate-500'
   return (
     <button

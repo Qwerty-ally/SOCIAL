@@ -78,14 +78,16 @@ export default function Sidebar() {
           New Post
         </Link>
 
-        {/* Go Live button */}
-        <Link
-          to="/live"
-          className="mt-2 flex items-center justify-center gap-2 w-full py-3 bg-red-500 hover:bg-red-400 text-white rounded-xl font-semibold text-sm transition shadow shadow-red-500/30"
-        >
-          <Radio size={18} />
-          Go Live
-        </Link>
+        {/* Go Live button — hidden for fans */}
+        {profile?.role !== 'fan' && (
+          <Link
+            to="/live"
+            className="mt-2 flex items-center justify-center gap-2 w-full py-3 bg-red-500 hover:bg-red-400 text-white rounded-xl font-semibold text-sm transition shadow shadow-red-500/30"
+          >
+            <Radio size={18} />
+            Go Live
+          </Link>
+        )}
       </div>
 
       {/* Profile footer */}
