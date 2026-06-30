@@ -26,6 +26,8 @@ export default function ProfilePage() {
   const [editForm, setEditForm] = useState({})
   const [savingEdit, setSavingEdit] = useState(false)
   const [followed, setFollowed] = useState(false)
+  const [renaming, setRenaming] = useState(false)
+  const [renameForm, setRenameForm] = useState({ displayName: '', username: '' })
 
   const isMe = myProfile?.username === username
 
@@ -121,6 +123,22 @@ export default function ProfilePage() {
     setSavingEdit(false)
   }
 
+  async function saveRename() {
+    setSavingEdit(true)
+    try {
+      const updates = {}
+      if (renameForm.displayName.trim()) updates.displayName = renameForm.displayName.trim()
+      if (renameForm.username.trim()) updates.username = renameForm.username.trim().toLowerCase().replace(/\s+/g, '_')
+      await updateDoc(doc(db, 'users', profile.id), updates)
+      setLocalProfile(prev => ({ ...prev, ...updates }))
+      setRenaming(false)
+      toast.success('Profile renamed!')
+    } catch (err) {
+      toast.error(err.message)
+    }
+    setSavingEdit(false)
+  }
+
   if (loading) return (
     <div className="flex justify-center py-20">
       <Loader2 className="animate-spin text-sky-400" size={28} />
@@ -187,6 +205,11 @@ export default function ProfilePage() {
               {savingEdit ? '…' : 'Save Avatar'}
             </button>
           )}
+          {myProfile?.role === 'owner' && !isMe && !editForm.avatarFile && (
+            <button onClick={() => { setRenaming(r => !r); setRenameForm({ displayName: profile.displayName, username: profile.username }) }} className="px-4 py-1.5 rounded-full border border-amber-500/60 text-amber-400 text-sm font-semibold hover:bg-amber-500/10 transition">
+              Rename
+            </button>
+          )}
           {isMe ? (
             editing ? (
               <div className="flex gap-2">
@@ -215,6 +238,33 @@ export default function ProfilePage() {
             </button>
           )}
         </div>
+
+        {/* Owner rename form */}
+        {renaming && (
+          <div className="mb-4 p-3 bg-amber-500/10 border border-amber-500/30 rounded-xl space-y-2">
+            <p className="text-xs text-amber-400 font-semibold">Rename Profile</p>
+            <input
+              value={renameForm.displayName}
+              onChange={e => setRenameForm(f => ({ ...f, displayName: e.target.value }))}
+              placeholder="Display name"
+              className="w-full bg-slate-800 border border-slate-600 rounded-xl px-3 py-2 text-sm text-white focus:outline-none focus:border-amber-400"
+            />
+            <input
+              value={renameForm.username}
+              onChange={e => setRenameForm(f => ({ ...f, username: e.target.value }))}
+              placeholder="Username"
+              className="w-full bg-slate-800 border border-slate-600 rounded-xl px-3 py-2 text-sm text-white focus:outline-none focus:border-amber-400"
+            />
+            <div className="flex gap-2">
+              <button onClick={saveRename} disabled={savingEdit} className="px-4 py-1.5 bg-amber-500 hover:bg-amber-400 text-white rounded-xl text-sm font-semibold transition disabled:opacity-50">
+                {savingEdit ? '…' : 'Save'}
+              </button>
+              <button onClick={() => setRenaming(false)} className="px-4 py-1.5 border border-slate-600 text-slate-300 rounded-xl text-sm hover:bg-slate-800 transition">
+                Cancel
+              </button>
+            </div>
+          </div>
+        )}
 
         {/* Info */}
         {editing ? (
