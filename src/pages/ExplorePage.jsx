@@ -27,40 +27,29 @@ export default function ExplorePage() {
     if (!searchQ.trim()) return
     setSearching(true)
 
-    // Search users by username
-    const usersQ = query(
-      collection(db, 'users'),
-      where('username', '>=', searchQ.toLowerCase()),
-      where('username', '<=', searchQ.toLowerCase() + ''),
-      limit(5)
-    )
-    const usersSnap = await getDocs(usersQ)
-    const byUsername = usersSnap.docs.map(d => ({ id: d.id, ...d.data(), _type: 'user' }))
+    const q = searchQ.toLowerCase().trim()
+    const combined = []
 
-    // Search users by display name (case-insensitive)
-    const namesQ = query(
-      collection(db, 'users'),
-      where('displayNameLower', '>=', searchQ.toLowerCase()),
-      where('displayNameLower', '<=', searchQ.toLowerCase() + ''),
-      limit(5)
-    )
-    const namesSnap = await getDocs(namesQ)
-    const byName = namesSnap.docs.map(d => ({ id: d.id, ...d.data(), _type: 'user' }))
-    const seen = new Set(byUsername.map(u => u.id))
-    const users = [...byUsername, ...byName.filter(u => !seen.has(u.id))]
+    // Search by username
+    try {
+      const snap = await getDocs(query(collection(db, 'users'), where('username', '>=', q), where('username', '<=', q + ''), limit(5)))
+      snap.docs.forEach(d => combined.push({ id: d.id, ...d.data(), _type: 'user' }))
+    } catch {}
+
+    // Search by display name
+    try {
+      const snap = await getDocs(query(collection(db, 'users'), where('displayNameLower', '>=', q), where('displayNameLower', '<=', q + ''), limit(5)))
+      snap.docs.forEach(d => { if (!combined.find(u => u.id === d.id)) combined.push({ id: d.id, ...d.data(), _type: 'user' }) })
+    } catch {}
 
     // Search posts by tag
-    const tag = searchQ.replace('#', '').toLowerCase()
-    const postsQ = query(
-      collection(db, 'posts'),
-      where('tags', 'array-contains', tag),
-      orderBy('createdAt', 'desc'),
-      limit(20)
-    )
-    const postsSnap = await getDocs(postsQ)
-    const tagged = postsSnap.docs.map(d => ({ id: d.id, ...d.data(), _type: 'post' }))
+    try {
+      const tag = searchQ.replace('#', '').toLowerCase().trim()
+      const snap = await getDocs(query(collection(db, 'posts'), where('tags', 'array-contains', tag), orderBy('createdAt', 'desc'), limit(20)))
+      snap.docs.forEach(d => combined.push({ id: d.id, ...d.data(), _type: 'post' }))
+    } catch {}
 
-    setResults([...users, ...tagged])
+    setResults(combined)
     setSearching(false)
   }
 
