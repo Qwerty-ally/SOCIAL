@@ -40,8 +40,8 @@ export default function GoLivePage() {
     if (!localStream.current) return toast.error('Camera not ready')
     try {
       // End any existing active streams for this user
-      const existing = await getDocs(query(collection(db, 'streams'), where('hostId', '==', user.uid), where('active', '==', true)))
-      await Promise.all(existing.docs.map(d => updateDoc(d.ref, { active: false })))
+      const existing = await getDocs(query(collection(db, 'streams'), where('hostId', '==', user.uid)))
+      await Promise.all(existing.docs.filter(d => d.data().active).map(d => updateDoc(d.ref, { active: false })))
 
       const ref = await addDoc(collection(db, 'streams'), {
         hostId: user.uid,
@@ -76,19 +76,7 @@ export default function GoLivePage() {
     const pc = new RTCPeerConnection(ICE)
     peerConns.current[viewerId] = pc
 
-    localStream.current.getTracks().forEach(t => {
-      if (t.kind === 'video') {
-        pc.addTransceiver(t, {
-          streams: [localStream.current],
-          sendEncodings: [{ maxBitrate: 20_000_000, maxFramerate: 60 }],
-        })
-      } else {
-        pc.addTransceiver(t, {
-          streams: [localStream.current],
-          sendEncodings: [{ maxBitrate: 320_000 }],
-        })
-      }
-    })
+    localStream.current.getTracks().forEach(t => pc.addTrack(t, localStream.current))
 
     pc.onicecandidate = async e => {
       if (e.candidate) {
@@ -104,6 +92,14 @@ export default function GoLivePage() {
       const data = snap.data()
       if (data?.answer && !pc.remoteDescription) {
         await pc.setRemoteDescription(new RTCSessionDescription(data.answer))
+        // Boost bitrate after connection is established
+        pc.getSenders().forEach(sender => {
+          const params = sender.getParameters()
+          if (!params.encodings || params.encodings.length === 0) return
+          if (sender.track?.kind === 'video') params.encodings[0].maxBitrate = 20_000_000
+          if (sender.track?.kind === 'audio') params.encodings[0].maxBitrate = 320_000
+          sender.setParameters(params).catch(() => {})
+        })
       }
     })
     unsubs.current.push(unsub)
