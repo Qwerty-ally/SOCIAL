@@ -53,6 +53,12 @@ service cloud.firestore {
       }
     }
 
+    match /stories/{storyId} {
+      allow read: if request.auth != null;
+      allow create: if request.auth != null;
+      allow delete: if request.auth.uid == resource.data.authorId;
+    }
+
     match /conversations/{convoId} {
       allow read, write: if request.auth != null;
 

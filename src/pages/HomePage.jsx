@@ -4,6 +4,7 @@ import { db } from '../firebase'
 import { useAuth } from '../context/AuthContext'
 import ComposeBox from '../components/ComposeBox'
 import PostCard from '../components/PostCard'
+import StoriesBar from '../components/StoriesBar'
 import { Loader2, Users, Zap, AlertCircle, Radio } from 'lucide-react'
 import { Link } from 'react-router-dom'
 
@@ -58,6 +59,8 @@ export default function HomePage() {
           <TabBtn label="Following" icon={<Users size={15} />} active={tab === 'following'} onClick={() => setTab('following')} />
         </div>
       </div>
+
+      <StoriesBar />
 
       {liveStreams.length > 0 && (
         <div className="px-4 py-3 border-b border-slate-700/50">
