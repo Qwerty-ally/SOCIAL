@@ -5,7 +5,7 @@ import {
 } from 'firebase/firestore'
 import { db } from '../firebase'
 import { useAuth } from '../context/AuthContext'
-import { Search, Send, MessageCircle, Loader2, ArrowLeft, Users, Plus, X, Check } from 'lucide-react'
+import { Search, Send, MessageCircle, Loader2, ArrowLeft, Users, Plus, X, Check, Settings, UserMinus, UserPlus } from 'lucide-react'
 import { formatDistanceToNow } from 'date-fns'
 import toast from 'react-hot-toast'
 
@@ -20,6 +20,7 @@ export default function MessagesPage() {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
   const [showGroupModal, setShowGroupModal] = useState(false)
+  const [showGroupSettings, setShowGroupSettings] = useState(false)
   const bottomRef = useRef(null)
 
   useEffect(() => {
@@ -170,12 +171,17 @@ export default function MessagesPage() {
             ) : (
               <img src={convoAvatar(activeConvo)} alt="" className="w-9 h-9 rounded-full object-cover" />
             )}
-            <div>
+            <div className="flex-1 min-w-0">
               <p className="text-sm font-semibold text-white">{convoName(activeConvo)}</p>
               {activeConvo.isGroup && (
                 <p className="text-xs text-slate-500">{activeConvo.participants.length} members</p>
               )}
             </div>
+            {activeConvo.isGroup && (
+              <button onClick={() => setShowGroupSettings(true)} className="p-1.5 rounded-full text-slate-400 hover:text-white hover:bg-slate-700 transition">
+                <Settings size={17} />
+              </button>
+            )}
           </div>
 
           <div className="flex-1 overflow-y-auto anchor-scrollbar p-4 space-y-3">
@@ -223,6 +229,19 @@ export default function MessagesPage() {
       {showGroupModal && (
         <GroupModal user={user} profile={profile} conversations={conversations} onClose={() => setShowGroupModal(false)}
           onCreated={convo => { setActiveConvo(convo); setShowGroupModal(false) }} />
+      )}
+
+      {/* Group settings modal */}
+      {showGroupSettings && activeConvo?.isGroup && (
+        <GroupSettingsModal
+          convo={activeConvo}
+          currentUserId={user.uid}
+          onClose={() => setShowGroupSettings(false)}
+          onUpdate={updated => {
+            setActiveConvo(updated)
+            setShowGroupSettings(false)
+          }}
+        />
       )}
     </div>
   )
@@ -312,6 +331,105 @@ function GroupModal({ user, profile, onClose, onCreated }) {
           className="w-full py-2.5 bg-sky-500 hover:bg-sky-400 text-white rounded-xl font-semibold text-sm transition disabled:opacity-50">
           {creating ? 'Creating…' : `Create Group (${selected.length + 1} members)`}
         </button>
+      </div>
+    </div>
+  )
+}
+
+function GroupSettingsModal({ convo, currentUserId, onClose, onUpdate }) {
+  const [searchQ, setSearchQ] = useState('')
+  const [results, setResults] = useState([])
+  const [saving, setSaving] = useState(false)
+
+  const members = Object.entries(convo.participantProfiles || {})
+
+  async function search(e) {
+    e.preventDefault()
+    if (!searchQ.trim()) return
+    const q = query(collection(db, 'users'), where('username', '>=', searchQ.toLowerCase()), where('username', '<=', searchQ.toLowerCase() + '￿'), limit(8))
+    const snap = await getDocs(q)
+    setResults(snap.docs.map(d => ({ id: d.id, ...d.data() })).filter(u => !convo.participants.includes(u.id)))
+  }
+
+  async function addMember(u) {
+    setSaving(true)
+    const newParticipants = [...convo.participants, u.id]
+    const newProfiles = { ...convo.participantProfiles, [u.id]: { displayName: u.displayName, avatar: u.avatar, username: u.username } }
+    await updateDoc(doc(db, 'conversations', convo.id), { participants: newParticipants, participantProfiles: newProfiles })
+    toast.success(`Added ${u.displayName}`)
+    setResults(r => r.filter(x => x.id !== u.id))
+    onUpdate({ ...convo, participants: newParticipants, participantProfiles: newProfiles })
+    setSaving(false)
+  }
+
+  async function removeMember(uid) {
+    if (uid === currentUserId && !confirm('Leave this group?')) return
+    if (uid !== currentUserId && !confirm('Remove this member?')) return
+    setSaving(true)
+    const newParticipants = convo.participants.filter(p => p !== uid)
+    const newProfiles = { ...convo.participantProfiles }
+    delete newProfiles[uid]
+    await updateDoc(doc(db, 'conversations', convo.id), { participants: newParticipants, participantProfiles: newProfiles })
+    toast.success(uid === currentUserId ? 'You left the group' : 'Member removed')
+    onUpdate({ ...convo, participants: newParticipants, participantProfiles: newProfiles })
+    setSaving(false)
+  }
+
+  return (
+    <div className="fixed inset-0 z-50 bg-black/60 flex items-center justify-center p-4">
+      <div className="bg-[#1e293b] rounded-2xl border border-slate-700 w-full max-w-sm p-5 space-y-4">
+        <div className="flex items-center justify-between">
+          <h2 className="font-semibold text-white flex items-center gap-2"><Settings size={16} className="text-sky-400" /> Manage Group</h2>
+          <button onClick={onClose} className="text-slate-400 hover:text-white"><X size={18} /></button>
+        </div>
+
+        {/* Current members */}
+        <div>
+          <p className="text-xs text-slate-500 font-semibold uppercase tracking-wider mb-2">Members ({members.length})</p>
+          <div className="space-y-1 max-h-48 overflow-y-auto anchor-scrollbar">
+            {members.map(([uid, p]) => (
+              <div key={uid} className="flex items-center gap-2 p-2 rounded-xl">
+                <img src={p.avatar || `https://api.dicebear.com/9.x/thumbs/svg?seed=${p.username}`} alt="" className="w-8 h-8 rounded-full object-cover" />
+                <div className="flex-1 min-w-0">
+                  <p className="text-sm font-medium text-white truncate">{p.displayName}</p>
+                  <p className="text-xs text-slate-500">@{p.username}</p>
+                </div>
+                <button
+                  onClick={() => removeMember(uid)}
+                  disabled={saving}
+                  className="p-1.5 rounded-full text-slate-500 hover:text-red-400 hover:bg-red-400/10 transition"
+                  title={uid === currentUserId ? 'Leave group' : 'Remove'}
+                >
+                  <UserMinus size={14} />
+                </button>
+              </div>
+            ))}
+          </div>
+        </div>
+
+        {/* Add members */}
+        <div>
+          <p className="text-xs text-slate-500 font-semibold uppercase tracking-wider mb-2">Add Member</p>
+          <form onSubmit={search} className="relative mb-2">
+            <Search size={13} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-500" />
+            <input value={searchQ} onChange={e => setSearchQ(e.target.value)} placeholder="Search by username…"
+              className="w-full bg-slate-800 border border-slate-700 rounded-xl pl-8 pr-3 py-2 text-sm text-white placeholder-slate-500 focus:outline-none focus:border-sky-500" />
+          </form>
+          <div className="space-y-1 max-h-36 overflow-y-auto anchor-scrollbar">
+            {results.map(u => (
+              <div key={u.id} className="flex items-center gap-2 p-2 rounded-xl hover:bg-slate-800">
+                <img src={u.avatar || `https://api.dicebear.com/9.x/thumbs/svg?seed=${u.username}`} alt="" className="w-8 h-8 rounded-full object-cover" />
+                <div className="flex-1 min-w-0">
+                  <p className="text-sm font-medium text-white truncate">{u.displayName}</p>
+                  <p className="text-xs text-slate-500">@{u.username}</p>
+                </div>
+                <button onClick={() => addMember(u)} disabled={saving} className="p-1.5 rounded-full text-slate-500 hover:text-sky-400 hover:bg-sky-400/10 transition">
+                  <UserPlus size={14} />
+                </button>
+              </div>
+            ))}
+          </div>
+        </div>
       </div>
     </div>
   )
