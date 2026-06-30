@@ -9,8 +9,8 @@ import { auth, db } from '../firebase'
 import { Anchor, Mail, Lock, User, Eye, EyeOff, Shield, Users, KeyRound, Crown, Star } from 'lucide-react'
 import toast from 'react-hot-toast'
 
-// Change this to whatever secret you want
 const OWNER_CODE = 'ANCHOR#OFFICIAL'
+const MEMBER_CODE = 'ANCHOR#MEMBER'
 
 export default function AuthPage() {
   const [mode, setMode] = useState('login')
@@ -18,7 +18,7 @@ export default function AuthPage() {
   const [showPass, setShowPass] = useState(false)
   const [showCode, setShowCode] = useState(false)
   const [loading, setLoading] = useState(false)
-  const [form, setForm] = useState({ email: '', password: '', username: '', displayName: '', ownerCode: '' })
+  const [form, setForm] = useState({ email: '', password: '', username: '', displayName: '', ownerCode: '', memberCode: '' })
 
   const handle = (e) => setForm({ ...form, [e.target.name]: e.target.value })
 
@@ -30,6 +30,13 @@ export default function AuthPage() {
         if (role === 'owner') {
           if (form.ownerCode !== OWNER_CODE) {
             toast.error('Invalid owner code.')
+            setLoading(false)
+            return
+          }
+        }
+        if (role === 'member') {
+          if (form.memberCode !== MEMBER_CODE) {
+            toast.error('Invalid member code.')
             setLoading(false)
             return
           }
@@ -137,6 +144,24 @@ export default function AuthPage() {
                 <Field icon={<User size={16} />} name="displayName" placeholder="Display name" value={form.displayName} onChange={handle} />
                 <Field icon={<span className="text-slate-400 text-xs font-bold">@</span>} name="username" placeholder="Username (no spaces)" value={form.username} onChange={handle} required />
               </>
+            )}
+
+            {mode === 'signup' && role === 'member' && (
+              <div className="relative">
+                <div className="absolute left-3 top-1/2 -translate-y-1/2 text-sky-400"><KeyRound size={16} /></div>
+                <input
+                  type={showCode ? 'text' : 'password'}
+                  name="memberCode"
+                  placeholder="Member code"
+                  value={form.memberCode}
+                  onChange={handle}
+                  required
+                  className="w-full bg-slate-800 border border-sky-500/50 rounded-xl pl-9 pr-10 py-2.5 text-sm text-white placeholder-slate-500 focus:outline-none focus:border-sky-400 transition"
+                />
+                <button type="button" onClick={() => setShowCode(!showCode)} className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400">
+                  {showCode ? <EyeOff size={16} /> : <Eye size={16} />}
+                </button>
+              </div>
             )}
 
             {mode === 'signup' && role === 'owner' && (

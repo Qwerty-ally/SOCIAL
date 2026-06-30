@@ -15,12 +15,14 @@ export default function Sidebar() {
   const navigate = useNavigate()
   const unread = useNotifCount()
 
+  const isFan = profile?.role === 'fan'
+
   const links = [
     { to: '/',             icon: <Home size={22} />,        label: 'Home' },
     { to: '/explore',      icon: <Compass size={22} />,     label: 'Explore' },
     { to: '/trending',     icon: <TrendingUp size={22} />,  label: 'Trending' },
     { to: '/notifications',icon: <Bell size={22} />,        label: 'Notifications', badge: unread },
-    { to: '/messages',     icon: <MessageCircle size={22} />,label: 'Messages' },
+    ...(!isFan ? [{ to: '/messages', icon: <MessageCircle size={22} />, label: 'Messages' }] : []),
     { to: '/bookmarks',    icon: <Bookmark size={22} />,    label: 'Bookmarks' },
     { to: `/profile/${profile?.username}`, icon: <User size={22} />, label: 'Profile' },
   ]

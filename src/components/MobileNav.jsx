@@ -8,11 +8,13 @@ export default function MobileNav() {
   const { pathname } = useLocation()
   const unread = useNotifCount()
 
+  const isFan = profile?.role === 'fan'
+
   const links = [
     { to: '/',              icon: <Home size={22} /> },
     { to: '/explore',       icon: <Compass size={22} /> },
     { to: '/notifications', icon: <Bell size={22} />, badge: unread },
-    { to: '/messages',      icon: <MessageCircle size={22} /> },
+    ...(!isFan ? [{ to: '/messages', icon: <MessageCircle size={22} /> }] : []),
     { to: `/profile/${profile?.username}`, icon: <User size={22} /> },
   ]
 

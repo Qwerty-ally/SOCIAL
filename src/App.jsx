@@ -39,6 +39,12 @@ function ProtectedRoute({ children }) {
   return children
 }
 
+function FanGuard({ children }) {
+  const { profile } = useAuth()
+  if (profile?.role === 'fan') return <Navigate to="/" replace />
+  return children
+}
+
 function AppRoutes() {
   const { user, loading } = useAuth()
 
@@ -55,7 +61,7 @@ function AppRoutes() {
       <Route path="/explore" element={<ProtectedRoute><Layout><ExplorePage /></Layout></ProtectedRoute>} />
       <Route path="/trending" element={<ProtectedRoute><Layout><TrendingPage /></Layout></ProtectedRoute>} />
       <Route path="/notifications" element={<ProtectedRoute><Layout><NotificationsPage /></Layout></ProtectedRoute>} />
-      <Route path="/messages" element={<ProtectedRoute><Layout><MessagesPage /></Layout></ProtectedRoute>} />
+      <Route path="/messages" element={<ProtectedRoute><Layout><FanGuard><MessagesPage /></FanGuard></Layout></ProtectedRoute>} />
       <Route path="/bookmarks" element={<ProtectedRoute><Layout><BookmarksPage /></Layout></ProtectedRoute>} />
       <Route path="/compose" element={<ProtectedRoute><Layout><ComposePage /></Layout></ProtectedRoute>} />
       <Route path="/live" element={<ProtectedRoute><Layout><GoLivePage /></Layout></ProtectedRoute>} />
