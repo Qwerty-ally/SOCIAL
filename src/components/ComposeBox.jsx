@@ -5,7 +5,7 @@ import { uploadMedia } from '../lib/cloudinary'
 import { useAuth } from '../context/AuthContext'
 import {
   Image, Video, X, Tag, Loader2, Music, Play, Pause,
-  Calendar, Clock, MapPin, Timer, Users, UserPlus, Search
+  Calendar, Clock, MapPin, Timer, Users, UserPlus, Search, FileText
 } from 'lucide-react'
 import toast from 'react-hot-toast'
 
@@ -84,6 +84,10 @@ export default function ComposeBox({ onPost, replyTo = null, autoFocus = false }
   const [coAuthors, setCoAuthors] = useState([])
   const [showCollabSearch, setShowCollabSearch] = useState(false)
 
+  // Drafts
+  const [drafts, setDrafts] = useState([])
+  const [showDrafts, setShowDrafts] = useState(false)
+
   // @mention autocomplete
   const [mentionQuery, setMentionQuery] = useState(null)
   const [mentionResults, setMentionResults] = useState([])
@@ -117,6 +121,59 @@ export default function ComposeBox({ onPost, replyTo = null, autoFocus = false }
     document.addEventListener('mousedown', handler)
     return () => document.removeEventListener('mousedown', handler)
   }, [mentionResults.length])
+
+  // Load drafts from localStorage on mount
+  useEffect(() => {
+    if (!user?.uid) return
+    const raw = localStorage.getItem(`anchor_drafts_${user.uid}`)
+    if (raw) setDrafts(JSON.parse(raw))
+  }, [user?.uid])
+
+  function draftTimeAgo(iso) {
+    const diff = Date.now() - new Date(iso).getTime()
+    if (diff < 60000) return 'just now'
+    if (diff < 3600000) return `${Math.floor(diff / 60000)}m ago`
+    if (diff < 86400000) return `${Math.floor(diff / 3600000)}h ago`
+    return `${Math.floor(diff / 86400000)}d ago`
+  }
+
+  function saveDraft() {
+    if (!content.trim() && postType === 'normal') return toast.error('Nothing to save as draft')
+    const draft = {
+      id: Date.now().toString(),
+      content,
+      postType,
+      eventTitle,
+      eventDate,
+      eventLocation,
+      countdownLabel,
+      countdownTo,
+      savedAt: new Date().toISOString(),
+    }
+    const updated = [draft, ...drafts].slice(0, 10)
+    setDrafts(updated)
+    localStorage.setItem(`anchor_drafts_${user.uid}`, JSON.stringify(updated))
+    toast.success('Draft saved!')
+  }
+
+  function loadDraft(draft) {
+    setContent(draft.content || '')
+    setPostType(draft.postType || 'normal')
+    setEventTitle(draft.eventTitle || '')
+    setEventDate(draft.eventDate || '')
+    setEventLocation(draft.eventLocation || '')
+    setCountdownLabel(draft.countdownLabel || '')
+    setCountdownTo(draft.countdownTo || '')
+    setShowDrafts(false)
+    toast.success('Draft loaded')
+  }
+
+  function deleteDraft(id, e) {
+    e.stopPropagation()
+    const updated = drafts.filter(d => d.id !== id)
+    setDrafts(updated)
+    localStorage.setItem(`anchor_drafts_${user.uid}`, JSON.stringify(updated))
+  }
 
   const imageRef = useRef(null)
   const videoRef = useRef(null)
@@ -581,6 +638,41 @@ export default function ComposeBox({ onPost, replyTo = null, autoFocus = false }
           </button>
         )}
 
+        {/* Drafts panel */}
+        {showDrafts && !replyTo && (
+          <div className="mt-2 mb-1 bg-slate-900 border border-slate-700 rounded-xl overflow-hidden">
+            {drafts.length === 0 ? (
+              <p className="text-xs text-slate-500 px-4 py-3 text-center">No saved drafts</p>
+            ) : (
+              <div className="divide-y divide-slate-800 max-h-48 overflow-y-auto anchor-scrollbar">
+                {drafts.map(d => (
+                  <div
+                    key={d.id}
+                    onClick={() => loadDraft(d)}
+                    className="flex items-center gap-3 px-4 py-2.5 hover:bg-slate-800 cursor-pointer group"
+                  >
+                    <div className="flex-1 min-w-0">
+                      <p className="text-sm text-slate-200 truncate">
+                        {d.content || (d.postType === 'event' ? `Event: ${d.eventTitle}` : d.postType === 'countdown' ? `Countdown: ${d.countdownLabel}` : 'Empty draft')}
+                      </p>
+                      <p className="text-[10px] text-slate-500 mt-0.5 capitalize">
+                        {d.postType !== 'normal' ? `${d.postType} · ` : ''}{draftTimeAgo(d.savedAt)}
+                      </p>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={e => deleteDraft(d.id, e)}
+                      className="opacity-0 group-hover:opacity-100 p-1 rounded-full text-slate-600 hover:text-red-400 transition"
+                    >
+                      <X size={12} />
+                    </button>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
+
         <div className="flex items-center justify-between mt-3">
           <div className="flex items-center gap-1 flex-wrap">
             <input type="file" ref={imageRef} accept="image/*" multiple onChange={pickImages} className="hidden" />
@@ -604,9 +696,26 @@ export default function ComposeBox({ onPost, replyTo = null, autoFocus = false }
                 <ToolBtn icon={<UserPlus size={18} />} onClick={() => setShowCollabSearch(v => !v)} label="Collab" active={showCollabSearch || coAuthors.length > 0} />
               </>
             )}
+
+            {/* Drafts toggle */}
+            {!replyTo && (
+              <button
+                type="button"
+                onClick={() => setShowDrafts(v => !v)}
+                className={`relative flex items-center gap-1 px-2 py-1 rounded-lg text-xs font-medium transition ${showDrafts ? 'text-sky-400 bg-sky-500/10' : 'text-slate-500 hover:text-white'}`}
+              >
+                <FileText size={14} />
+                Drafts
+                {drafts.length > 0 && (
+                  <span className="absolute -top-1.5 -right-1.5 w-4 h-4 bg-sky-500 text-white text-[9px] rounded-full flex items-center justify-center font-bold leading-none">
+                    {drafts.length}
+                  </span>
+                )}
+              </button>
+            )}
           </div>
 
-          <div className="flex items-center gap-3">
+          <div className="flex items-center gap-2">
             {uploading && (
               <span className="flex items-center gap-1.5 text-xs text-slate-400">
                 <Loader2 size={12} className="animate-spin" /> Uploading…
@@ -615,6 +724,16 @@ export default function ComposeBox({ onPost, replyTo = null, autoFocus = false }
             <span className={`text-xs font-mono ${remaining < 20 ? (remaining < 0 ? 'text-red-400' : 'text-yellow-400') : 'text-slate-500'}`}>
               {remaining}
             </span>
+            {!replyTo && (
+              <button
+                type="button"
+                onClick={saveDraft}
+                disabled={!canPost}
+                className="px-3 py-2 border border-slate-600 text-slate-400 hover:text-white hover:border-slate-500 rounded-full text-sm font-medium transition disabled:opacity-40"
+              >
+                Save draft
+              </button>
+            )}
             <button
               type="submit"
               disabled={loading || !canPost || remaining < 0}
