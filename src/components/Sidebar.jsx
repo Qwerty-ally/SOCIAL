@@ -93,16 +93,14 @@ export default function Sidebar() {
           </Link>
         )}
 
-        {/* Watch Party — hidden for fans */}
-        {!isFan && (
-          <Link
-            to="/watch-party"
-            className="mt-2 flex items-center justify-center gap-2 w-full py-2.5 border border-slate-700 text-slate-400 hover:text-white hover:bg-slate-800 rounded-xl text-sm transition"
-          >
-            <Users size={16} />
-            Watch Party
-          </Link>
-        )}
+        {/* Watch Party — visible to all */}
+        <Link
+          to="/watch-party"
+          className="mt-2 flex items-center justify-center gap-2 w-full py-2.5 border border-slate-700 text-slate-400 hover:text-white hover:bg-slate-800 rounded-xl text-sm transition"
+        >
+          <Users size={16} />
+          Watch Party
+        </Link>
 
         {/* Theme picker */}
         <div className="mt-2">

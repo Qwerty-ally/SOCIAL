@@ -1,15 +1,15 @@
-import { useState, useEffect, useRef, useCallback } from 'react'
-import { useParams, useNavigate } from 'react-router-dom'
+import { useState, useEffect, useRef } from 'react'
+import { useParams, useNavigate, Link } from 'react-router-dom'
 import {
   doc, addDoc, onSnapshot, collection, serverTimestamp,
-  query, orderBy, limit, updateDoc, deleteField
+  query, orderBy, limit, updateDoc, deleteField, where, getDocs
 } from 'firebase/firestore'
 import { db } from '../firebase'
 import { uploadMedia } from '../lib/cloudinary'
 import { useAuth } from '../context/AuthContext'
 import {
   ArrowLeft, Play, Pause, Users, Upload, Loader2, Send,
-  MessageCircle, Radio, Clock, X, Calendar
+  MessageCircle, Radio, Clock, X, Calendar, Plus
 } from 'lucide-react'
 import toast from 'react-hot-toast'
 
@@ -167,7 +167,7 @@ export default function WatchPartyPage() {
     })
   }
 
-  if (!partyId) return <CreateParty navigate={navigate} user={user} profile={profile} />
+  if (!partyId) return <PartyLobby navigate={navigate} user={user} profile={profile} />
 
   if (loading) return (
     <div className="flex justify-center py-20">
@@ -379,7 +379,113 @@ export default function WatchPartyPage() {
   )
 }
 
-function CreateParty({ navigate, user, profile }) {
+function PartyLobby({ navigate, user, profile }) {
+  const [parties, setParties] = useState([])
+  const [loadingParties, setLoadingParties] = useState(true)
+  const [showCreate, setShowCreate] = useState(false)
+  const isFan = profile?.role === 'fan'
+
+  useEffect(() => {
+    const q = query(
+      collection(db, 'watchParties'),
+      where('status', 'in', ['starting-soon', 'live']),
+      orderBy('createdAt', 'desc'),
+      limit(20)
+    )
+    const unsub = onSnapshot(q, snap => {
+      setParties(snap.docs.map(d => ({ id: d.id, ...d.data() })))
+      setLoadingParties(false)
+    }, () => setLoadingParties(false))
+    return () => unsub()
+  }, [])
+
+  if (showCreate) return <CreateParty navigate={navigate} user={user} profile={profile} onCancel={() => setShowCreate(false)} />
+
+  return (
+    <div className="max-w-lg mx-auto p-6">
+      <div className="flex items-center justify-between mb-6">
+        <div>
+          <h1 className="text-xl font-bold text-white">Watch Parties</h1>
+          <p className="text-sm text-slate-400">Join an active party or start your own</p>
+        </div>
+        {!isFan && (
+          <button
+            onClick={() => setShowCreate(true)}
+            className="flex items-center gap-2 px-4 py-2 bg-sky-500 hover:bg-sky-400 text-white rounded-xl text-sm font-semibold transition"
+          >
+            <Plus size={16} /> Create
+          </button>
+        )}
+      </div>
+
+      {loadingParties ? (
+        <div className="flex justify-center py-16">
+          <Loader2 className="animate-spin text-sky-400" size={28} />
+        </div>
+      ) : parties.length === 0 ? (
+        <div className="text-center py-16">
+          <div className="w-16 h-16 bg-slate-800 rounded-2xl flex items-center justify-center mx-auto mb-4">
+            <Users size={28} className="text-slate-600" />
+          </div>
+          <p className="text-slate-400 font-medium">No active parties right now</p>
+          {!isFan && (
+            <button onClick={() => setShowCreate(true)} className="mt-4 text-sky-400 hover:text-sky-300 text-sm transition">
+              Start one →
+            </button>
+          )}
+        </div>
+      ) : (
+        <div className="space-y-3">
+          {parties.map(p => (
+            <PartyCard key={p.id} party={p} navigate={navigate} currentUserId={user?.uid} />
+          ))}
+        </div>
+      )}
+    </div>
+  )
+}
+
+function PartyCard({ party, navigate, currentUserId }) {
+  const isLive = party.status === 'live'
+  const isHost = party.hostId === currentUserId
+
+  return (
+    <div className="bg-[#1e293b] border border-slate-700/50 rounded-2xl p-4 flex items-center gap-4">
+      <div className="relative shrink-0">
+        <img
+          src={party.hostAvatar || `https://api.dicebear.com/9.x/thumbs/svg?seed=${party.hostId}`}
+          alt=""
+          className="w-12 h-12 rounded-full object-cover"
+        />
+        {isLive ? (
+          <span className="absolute -bottom-1 -right-1 w-4 h-4 bg-red-500 rounded-full border-2 border-[#1e293b] flex items-center justify-center">
+            <span className="w-1.5 h-1.5 bg-white rounded-full animate-pulse" />
+          </span>
+        ) : (
+          <span className="absolute -bottom-1 -right-1 w-4 h-4 bg-amber-500 rounded-full border-2 border-[#1e293b] flex items-center justify-center">
+            <Clock size={8} className="text-white" />
+          </span>
+        )}
+      </div>
+      <div className="flex-1 min-w-0">
+        <p className="text-sm font-semibold text-white truncate">{party.hostName}'s Watch Party</p>
+        <span className={`inline-flex items-center gap-1 text-xs font-medium px-2 py-0.5 rounded-full mt-0.5 ${
+          isLive ? 'bg-red-500/20 text-red-400' : 'bg-amber-500/20 text-amber-400'
+        }`}>
+          {isLive ? <><Radio size={9} /> Live</> : <><Clock size={9} /> Starting Soon</>}
+        </span>
+      </div>
+      <button
+        onClick={() => navigate(`/watch-party/${party.id}`)}
+        className="shrink-0 px-4 py-2 bg-sky-500 hover:bg-sky-400 text-white rounded-xl text-sm font-semibold transition"
+      >
+        {isHost ? 'Manage' : 'Join'}
+      </button>
+    </div>
+  )
+}
+
+function CreateParty({ navigate, user, profile, onCancel }) {
   const [startingSoonFile, setStartingSoonFile] = useState(null)
   const [uploading, setUploading] = useState(false)
   const startingSoonRef = useRef(null)
@@ -403,7 +509,7 @@ function CreateParty({ navigate, user, profile }) {
         currentTime: 0,
         createdAt: serverTimestamp(),
       })
-      navigate(`/watch-party/${ref.id}`, { replace: true })
+      navigate(`/watch-party/${ref.id}`)
     } catch (err) {
       toast.error(err.message)
     }
@@ -453,7 +559,7 @@ function CreateParty({ navigate, user, profile }) {
           ? <><Loader2 size={18} className="animate-spin" /> {startingSoonFile ? 'Uploading…' : 'Creating…'}</>
           : 'Create Watch Party'}
       </button>
-      <button onClick={() => navigate(-1)} className="text-slate-500 hover:text-white text-sm transition">Cancel</button>
+      <button onClick={onCancel} className="text-slate-500 hover:text-white text-sm transition">Cancel</button>
     </div>
   )
 }
