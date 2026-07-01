@@ -5,7 +5,7 @@ import { useAuth } from '../context/AuthContext'
 import ComposeBox from '../components/ComposeBox'
 import PostCard from '../components/PostCard'
 import StoriesBar from '../components/StoriesBar'
-import { Loader2, Users, Zap, AlertCircle, Radio } from 'lucide-react'
+import { Loader2, Users, Zap, AlertCircle, Radio, Clock } from 'lucide-react'
 import { Link } from 'react-router-dom'
 
 export default function HomePage() {
@@ -15,10 +15,21 @@ export default function HomePage() {
   const [error, setError] = useState(null)
   const [tab, setTab] = useState('for-you')
   const [liveStreams, setLiveStreams] = useState([])
+  const [watchParties, setWatchParties] = useState([])
 
   useEffect(() => {
     const q = query(collection(db, 'streams'), where('active', '==', true), limit(10))
     return onSnapshot(q, snap => setLiveStreams(snap.docs.map(d => ({ id: d.id, ...d.data() }))), () => {})
+  }, [])
+
+  useEffect(() => {
+    const q = query(
+      collection(db, 'watchParties'),
+      where('status', 'in', ['starting-soon', 'live']),
+      orderBy('createdAt', 'desc'),
+      limit(10)
+    )
+    return onSnapshot(q, snap => setWatchParties(snap.docs.map(d => ({ id: d.id, ...d.data() }))), () => {})
   }, [])
 
   useEffect(() => {
@@ -80,6 +91,31 @@ export default function HomePage() {
                 </div>
                 <p className="text-xs text-slate-300 font-medium truncate w-16 text-center">{s.hostName}</p>
                 <p className="text-[10px] text-slate-500 flex items-center gap-0.5"><Users size={9} />{s.viewerCount ?? 0}</p>
+              </Link>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {watchParties.length > 0 && (
+        <div className="px-4 py-3 border-b border-slate-700/50">
+          <p className="text-xs text-slate-500 font-semibold uppercase tracking-wider mb-2 flex items-center gap-1.5">
+            <Users size={11} className="text-sky-400" /> Watch Parties
+          </p>
+          <div className="flex gap-3 overflow-x-auto pb-1 anchor-scrollbar">
+            {watchParties.map(p => (
+              <Link key={p.id} to={`/watch-party/${p.id}`} className="flex flex-col items-center gap-1.5 shrink-0">
+                <div className="relative">
+                  <img
+                    src={p.hostAvatar || `https://api.dicebear.com/9.x/thumbs/svg?seed=${p.hostId}`}
+                    alt=""
+                    className={`w-14 h-14 rounded-full object-cover ring-2 ${p.status === 'live' ? 'ring-red-500' : 'ring-amber-500'}`}
+                  />
+                  <span className={`absolute -bottom-1 left-1/2 -translate-x-1/2 text-white text-[9px] font-bold px-1.5 py-0.5 rounded-full flex items-center gap-0.5 ${p.status === 'live' ? 'bg-red-500' : 'bg-amber-500'}`}>
+                    {p.status === 'live' ? <><Radio size={7} />LIVE</> : <><Clock size={7} />SOON</>}
+                  </span>
+                </div>
+                <p className="text-xs text-slate-300 font-medium truncate w-16 text-center">{p.hostName}</p>
               </Link>
             ))}
           </div>
