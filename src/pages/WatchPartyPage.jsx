@@ -56,12 +56,17 @@ export default function WatchPartyPage() {
   const isStartingSoon = party?.status === 'starting-soon'
   const secsLeft = useCountdownTo(party?.scheduledStartAt)
 
-  // Sync viewer video to host
+  // Sync viewer video to host + handle ended state
   useEffect(() => {
     if (!partyId) return
     const unsub = onSnapshot(doc(db, 'watchParties', partyId), snap => {
-      if (!snap.exists()) { navigate('/'); return }
+      if (!snap.exists()) { navigate('/watch-party'); return }
       const data = { id: snap.id, ...snap.data() }
+      if (data.status === 'ended') {
+        toast('Watch party has ended')
+        navigate('/watch-party')
+        return
+      }
       setParty(data)
       setLoading(false)
       if (data.status === 'live' && !isHost && videoRef.current) {
@@ -156,6 +161,12 @@ export default function WatchPartyPage() {
     setShowSchedulePicker(false)
   }
 
+  async function endParty() {
+    if (!confirm('End the watch party for everyone?')) return
+    await updateDoc(doc(db, 'watchParties', partyId), { status: 'ended' })
+    navigate('/watch-party')
+  }
+
   async function sendChat(e) {
     e.preventDefault()
     if (!chatText.trim() || !partyId) return
@@ -193,12 +204,22 @@ export default function WatchPartyPage() {
                   <Users size={10} /> {isHost ? 'You are the host' : 'Watching together'}
                 </p>
               </div>
-              {isStartingSoon && (
-                <span className="ml-auto shrink-0 text-xs font-semibold bg-amber-500/20 text-amber-400 px-2.5 py-1 rounded-full flex items-center gap-1.5">
-                  <span className="w-1.5 h-1.5 rounded-full bg-amber-400 animate-pulse" />
-                  Starting Soon
-                </span>
-              )}
+              <div className="ml-auto flex items-center gap-2 shrink-0">
+                {isStartingSoon && (
+                  <span className="text-xs font-semibold bg-amber-500/20 text-amber-400 px-2.5 py-1 rounded-full flex items-center gap-1.5">
+                    <span className="w-1.5 h-1.5 rounded-full bg-amber-400 animate-pulse" />
+                    Starting Soon
+                  </span>
+                )}
+                {isHost && (
+                  <button
+                    onClick={endParty}
+                    className="text-xs font-semibold bg-red-500/20 text-red-400 hover:bg-red-500/30 px-3 py-1 rounded-full transition"
+                  >
+                    End Party
+                  </button>
+                )}
+              </div>
             </div>
           )}
         </div>
