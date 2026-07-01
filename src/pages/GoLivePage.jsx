@@ -7,7 +7,20 @@ import { Video, VideoOff, Mic, MicOff, PhoneOff, Users, Radio, UserMinus, Loader
 import toast from 'react-hot-toast'
 import StreamChat from '../components/StreamChat'
 
-const ICE = { iceServers: [{ urls: ['stun:stun1.l.google.com:19302', 'stun:stun2.l.google.com:19302'] }] }
+const ICE = {
+  iceServers: [
+    { urls: ['stun:stun1.l.google.com:19302', 'stun:stun2.l.google.com:19302', 'stun:stun3.l.google.com:19302', 'stun:stun4.l.google.com:19302'] },
+    {
+      urls: [
+        'turn:openrelay.metered.ca:80',
+        'turn:openrelay.metered.ca:443',
+        'turn:openrelay.metered.ca:443?transport=tcp',
+      ],
+      username: 'openrelayproject',
+      credential: 'openrelayproject',
+    },
+  ],
+}
 
 export default function GoLivePage() {
   const { user, profile } = useAuth()
