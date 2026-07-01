@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect } from 'react'
+import { useState, useRef, useEffect, Fragment } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import {
   doc, updateDoc, arrayUnion, arrayRemove, deleteDoc,
@@ -256,23 +256,26 @@ export default function PostCard({ post, onDelete }) {
             </Link>
             {post.authorRole === 'owner' && <OwnerBadge />}
 
-            {/* Co-author */}
-            {post.coAuthorUsername && (
-              <>
-                <span className="text-slate-500 text-xs">+</span>
-                <Link
-                  to={`/profile/${post.coAuthorUsername}`}
-                  onClick={e => e.stopPropagation()}
-                  className="font-semibold text-white text-sm hover:text-sky-400 transition flex items-center gap-1"
-                >
-                  <img
-                    src={post.coAuthorAvatar || `https://api.dicebear.com/9.x/thumbs/svg?seed=${post.coAuthorUsername}`}
-                    alt=""
-                    className="w-4 h-4 rounded-full object-cover"
-                  />
-                  {post.coAuthorName}
-                </Link>
-              </>
+            {/* Co-authors */}
+            {(post.coAuthors?.length > 0 || post.coAuthorUsername) && (
+              (post.coAuthors || [{ username: post.coAuthorUsername, displayName: post.coAuthorName, avatar: post.coAuthorAvatar }])
+                .map(ca => (
+                  <Fragment key={ca.username || ca.id}>
+                    <span className="text-slate-500 text-xs">+</span>
+                    <Link
+                      to={`/profile/${ca.username}`}
+                      onClick={e => e.stopPropagation()}
+                      className="font-semibold text-white text-sm hover:text-sky-400 transition flex items-center gap-1"
+                    >
+                      <img
+                        src={ca.avatar || `https://api.dicebear.com/9.x/thumbs/svg?seed=${ca.username}`}
+                        alt=""
+                        className="w-4 h-4 rounded-full object-cover"
+                      />
+                      {ca.displayName}
+                    </Link>
+                  </Fragment>
+                ))
             )}
 
             <span className="text-slate-500 text-sm">@{post.authorUsername}</span>

@@ -81,7 +81,7 @@ export default function ComposeBox({ onPost, replyTo = null, autoFocus = false }
   // Collab
   const [collabSearch, setCollabSearch] = useState('')
   const [collabResults, setCollabResults] = useState([])
-  const [coAuthor, setCoAuthor] = useState(null)
+  const [coAuthors, setCoAuthors] = useState([])
   const [showCollabSearch, setShowCollabSearch] = useState(false)
 
   const imageRef = useRef(null)
@@ -162,9 +162,24 @@ export default function ComposeBox({ onPost, replyTo = null, autoFocus = false }
       collection(db, 'users'),
       where('username', '>=', q.toLowerCase()),
       where('username', '<=', q.toLowerCase() + '￿'),
-      limit(5)
+      limit(8)
     ))
-    setCollabResults(snap.docs.map(d => ({ id: d.id, ...d.data() })).filter(u => u.id !== user.uid))
+    const alreadyAdded = new Set(coAuthors.map(a => a.id))
+    setCollabResults(
+      snap.docs.map(d => ({ id: d.id, ...d.data() }))
+        .filter(u => u.id !== user.uid && !alreadyAdded.has(u.id))
+    )
+  }
+
+  function addCoAuthor(u) {
+    if (coAuthors.length >= 5) return toast.error('Max 5 collaborators')
+    setCoAuthors(prev => [...prev, u])
+    setCollabResults([])
+    setCollabSearch('')
+  }
+
+  function removeCoAuthor(id) {
+    setCoAuthors(prev => prev.filter(a => a.id !== id))
   }
 
   function parseTags(text) {
@@ -251,13 +266,15 @@ export default function ComposeBox({ onPost, replyTo = null, autoFocus = false }
         data.publishAt = new Date(scheduledAt).toISOString()
       }
 
-      // Collab author
-      if (coAuthor && !replyTo) {
-        data.coAuthorId = coAuthor.id
-        data.coAuthorName = coAuthor.displayName
-        data.coAuthorUsername = coAuthor.username
-        data.coAuthorAvatar = coAuthor.avatar || ''
-        data.coAuthorRole = coAuthor.role || 'member'
+      // Collab authors
+      if (coAuthors.length > 0 && !replyTo) {
+        data.coAuthors = coAuthors.map(a => ({
+          id: a.id,
+          displayName: a.displayName,
+          username: a.username,
+          avatar: a.avatar || '',
+          role: a.role || 'member',
+        }))
       }
 
       if (replyTo) {
@@ -272,7 +289,7 @@ export default function ComposeBox({ onPost, replyTo = null, autoFocus = false }
       setContent(''); setImages([]); clearVideo(); setAudioFile(null); setTagInput('')
       setPostType('normal'); setEventTitle(''); setEventDate(''); setEventLocation('')
       setCountdownLabel(''); setCountdownTo(''); setScheduledAt('')
-      setCoAuthor(null); setShowCollabSearch(false); setCloseFriendsOnly(false)
+      setCoAuthors([]); setShowCollabSearch(false); setCloseFriendsOnly(false)
       onPost?.()
       toast.success(replyTo ? 'Reply posted!' : 'Posted!')
     } catch (err) {
@@ -410,30 +427,36 @@ export default function ComposeBox({ onPost, replyTo = null, autoFocus = false }
           <div className="mt-2 bg-slate-800 rounded-xl p-3 space-y-2">
             <div className="flex items-center gap-2 mb-1">
               <UserPlus size={13} className="text-sky-400" />
-              <span className="text-xs font-semibold text-slate-300">Collab with</span>
-              <button type="button" onClick={() => { setShowCollabSearch(false); setCoAuthor(null) }} className="ml-auto text-slate-500 hover:text-white"><X size={13} /></button>
+              <span className="text-xs font-semibold text-slate-300">Collab with <span className="font-normal text-slate-500">({coAuthors.length}/5)</span></span>
+              <button type="button" onClick={() => { setShowCollabSearch(false); setCoAuthors([]) }} className="ml-auto text-slate-500 hover:text-white"><X size={13} /></button>
             </div>
-            {coAuthor ? (
-              <div className="flex items-center gap-2 p-2 bg-sky-500/10 rounded-lg">
-                <img src={coAuthor.avatar || `https://api.dicebear.com/9.x/thumbs/svg?seed=${coAuthor.username}`} alt="" className="w-7 h-7 rounded-full object-cover" />
-                <span className="text-sm text-white">{coAuthor.displayName}</span>
-                <button type="button" onClick={() => setCoAuthor(null)} className="ml-auto text-slate-500 hover:text-white"><X size={12} /></button>
+
+            {/* Added co-authors */}
+            {coAuthors.map(a => (
+              <div key={a.id} className="flex items-center gap-2 p-2 bg-sky-500/10 rounded-lg">
+                <img src={a.avatar || `https://api.dicebear.com/9.x/thumbs/svg?seed=${a.username}`} alt="" className="w-7 h-7 rounded-full object-cover" />
+                <span className="text-sm text-white flex-1">{a.displayName}</span>
+                <span className="text-xs text-slate-500">@{a.username}</span>
+                <button type="button" onClick={() => removeCoAuthor(a.id)} className="text-slate-500 hover:text-white ml-1"><X size={12} /></button>
               </div>
-            ) : (
+            ))}
+
+            {/* Search for more (up to 5) */}
+            {coAuthors.length < 5 && (
               <>
                 <div className="relative">
                   <Search size={13} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-500" />
                   <input
                     value={collabSearch}
                     onChange={e => searchCollab(e.target.value)}
-                    placeholder="Search username…"
+                    placeholder="Search username to add…"
                     className="w-full bg-slate-700 rounded-lg pl-8 pr-3 py-1.5 text-sm text-white placeholder-slate-500 focus:outline-none focus:ring-1 focus:ring-sky-500"
                   />
                 </div>
                 {collabResults.length > 0 && (
                   <div className="space-y-1">
                     {collabResults.map(u => (
-                      <button key={u.id} type="button" onClick={() => { setCoAuthor(u); setCollabResults([]) }}
+                      <button key={u.id} type="button" onClick={() => addCoAuthor(u)}
                         className="flex items-center gap-2 w-full p-2 rounded-lg hover:bg-slate-700 transition text-left">
                         <img src={u.avatar || `https://api.dicebear.com/9.x/thumbs/svg?seed=${u.username}`} alt="" className="w-7 h-7 rounded-full object-cover" />
                         <div>
@@ -493,7 +516,7 @@ export default function ComposeBox({ onPost, replyTo = null, autoFocus = false }
                 <ToolBtn icon={<Calendar size={18} />} onClick={() => setPostType(t => t === 'event' ? 'normal' : 'event')} label="Event" active={postType === 'event'} />
                 <ToolBtn icon={<Timer size={18} />} onClick={() => setPostType(t => t === 'countdown' ? 'normal' : 'countdown')} label="Countdown" active={postType === 'countdown'} />
                 <ToolBtn icon={<Clock size={18} />} onClick={() => setPostType(t => t === 'scheduled' ? 'normal' : 'scheduled')} label="Schedule" active={postType === 'scheduled'} />
-                <ToolBtn icon={<UserPlus size={18} />} onClick={() => setShowCollabSearch(v => !v)} label="Collab" active={showCollabSearch} />
+                <ToolBtn icon={<UserPlus size={18} />} onClick={() => setShowCollabSearch(v => !v)} label="Collab" active={showCollabSearch || coAuthors.length > 0} />
               </>
             )}
           </div>
