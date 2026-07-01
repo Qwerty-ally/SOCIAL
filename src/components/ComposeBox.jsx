@@ -84,6 +84,25 @@ export default function ComposeBox({ onPost, replyTo = null, autoFocus = false }
   const [coAuthors, setCoAuthors] = useState([])
   const [showCollabSearch, setShowCollabSearch] = useState(false)
 
+  // @mention autocomplete
+  const [mentionQuery, setMentionQuery] = useState(null)
+  const [mentionResults, setMentionResults] = useState([])
+  const textareaRef = useRef(null)
+
+  useEffect(() => {
+    if (mentionQuery === null || mentionQuery.length < 1) { setMentionResults([]); return }
+    const id = setTimeout(async () => {
+      const snap = await getDocs(query(
+        collection(db, 'users'),
+        where('username', '>=', mentionQuery.toLowerCase()),
+        where('username', '<=', mentionQuery.toLowerCase() + '￿'),
+        limit(5)
+      ))
+      setMentionResults(snap.docs.map(d => ({ id: d.id, ...d.data() })).filter(u => u.id !== user?.uid))
+    }, 200)
+    return () => clearTimeout(id)
+  }, [mentionQuery])
+
   const imageRef = useRef(null)
   const videoRef = useRef(null)
   const audioRef = useRef(null)
@@ -182,6 +201,35 @@ export default function ComposeBox({ onPost, replyTo = null, autoFocus = false }
     setCoAuthors(prev => prev.filter(a => a.id !== id))
   }
 
+  function handleContentChange(e) {
+    const val = e.target.value
+    setContent(val)
+    const pos = e.target.selectionStart
+    const before = val.slice(0, pos)
+    const match = before.match(/@(\w*)$/)
+    if (match) {
+      setMentionQuery(match[1])
+    } else {
+      setMentionQuery(null)
+      setMentionResults([])
+    }
+  }
+
+  function insertMention(username) {
+    const pos = textareaRef.current?.selectionStart ?? content.length
+    const before = content.slice(0, pos)
+    const after = content.slice(pos)
+    const newBefore = before.replace(/@(\w*)$/, `@${username} `)
+    setContent(newBefore + after)
+    setMentionResults([])
+    setMentionQuery(null)
+    setTimeout(() => {
+      textareaRef.current?.focus()
+      const newPos = newBefore.length
+      textareaRef.current?.setSelectionRange(newPos, newPos)
+    }, 0)
+  }
+
   function parseTags(text) {
     const inline = [...text.matchAll(/#(\w+)/g)].map(m => m[1].toLowerCase())
     const extra = tagInput.split(',').map(t => t.trim().toLowerCase()).filter(Boolean)
@@ -266,15 +314,15 @@ export default function ComposeBox({ onPost, replyTo = null, autoFocus = false }
         data.publishAt = new Date(scheduledAt).toISOString()
       }
 
-      // Collab authors
-      if (coAuthors.length > 0 && !replyTo) {
-        data.coAuthors = coAuthors.map(a => ({
-          id: a.id,
-          displayName: a.displayName,
-          username: a.username,
-          avatar: a.avatar || '',
-          role: a.role || 'member',
+      // Collab authors — use pending approval flow
+      const hasPendingCollab = coAuthors.length > 0 && !replyTo
+      if (hasPendingCollab) {
+        data.pendingCoAuthors = coAuthors.map(a => ({
+          id: a.id, displayName: a.displayName, username: a.username,
+          avatar: a.avatar || '', role: a.role || 'member',
         }))
+        data.coAuthors = []
+        data.collabPending = true
       }
 
       if (replyTo) {
@@ -282,8 +330,28 @@ export default function ComposeBox({ onPost, replyTo = null, autoFocus = false }
         data.replyToAuthor = replyTo.authorUsername
         await addDoc(collection(db, 'posts', replyTo.id, 'comments'), data)
         await updateDoc(doc(db, 'posts', replyTo.id), { commentCount: increment(1) })
+        toast.success('Reply posted!')
       } else {
-        await addDoc(collection(db, 'posts'), data)
+        const postRef = await addDoc(collection(db, 'posts'), data)
+        if (hasPendingCollab) {
+          await Promise.all(coAuthors.map(a =>
+            addDoc(collection(db, 'notifications'), {
+              type: 'collab-request',
+              to: a.id,
+              from: user.uid,
+              fromName: profile?.displayName || 'Someone',
+              fromAvatar: profile?.avatar || '',
+              postId: postRef.id,
+              postPreview: content.trim().slice(0, 100),
+              status: 'pending',
+              read: false,
+              createdAt: serverTimestamp(),
+            })
+          ))
+          toast.success('Collab requests sent! Post goes live once everyone accepts.')
+        } else {
+          toast.success(postType === 'scheduled' ? 'Post scheduled!' : 'Posted!')
+        }
       }
 
       setContent(''); setImages([]); clearVideo(); setAudioFile(null); setTagInput('')
@@ -291,7 +359,6 @@ export default function ComposeBox({ onPost, replyTo = null, autoFocus = false }
       setCountdownLabel(''); setCountdownTo(''); setScheduledAt('')
       setCoAuthors([]); setShowCollabSearch(false); setCloseFriendsOnly(false)
       onPost?.()
-      toast.success(replyTo ? 'Reply posted!' : 'Posted!')
     } catch (err) {
       setUploading(false)
       toast.error(err.message)
@@ -315,15 +382,37 @@ export default function ComposeBox({ onPost, replyTo = null, autoFocus = false }
           </p>
         )}
 
-        <textarea
-          value={content}
-          onChange={e => setContent(e.target.value)}
-          placeholder={replyTo ? 'Post your reply…' : "What's happening in ANCHOR?"}
-          autoFocus={autoFocus}
-          rows={3}
-          className="w-full bg-transparent text-white placeholder-slate-500 text-sm resize-none focus:outline-none leading-relaxed"
-          maxLength={MAX_CHARS + 50}
-        />
+        <div className="relative">
+          <textarea
+            ref={textareaRef}
+            value={content}
+            onChange={handleContentChange}
+            onKeyDown={e => { if (e.key === 'Escape') { setMentionResults([]); setMentionQuery(null) } }}
+            placeholder={replyTo ? 'Post your reply…' : "What's happening in ANCHOR?"}
+            autoFocus={autoFocus}
+            rows={3}
+            className="w-full bg-transparent text-white placeholder-slate-500 text-sm resize-none focus:outline-none leading-relaxed"
+            maxLength={MAX_CHARS + 50}
+          />
+          {mentionResults.length > 0 && (
+            <div className="absolute left-0 right-0 top-full mt-1 bg-[#1e293b] border border-slate-700 rounded-xl shadow-xl z-50 overflow-hidden">
+              {mentionResults.map(u => (
+                <button
+                  key={u.id}
+                  type="button"
+                  onMouseDown={e => { e.preventDefault(); insertMention(u.username) }}
+                  className="flex items-center gap-2 w-full px-3 py-2 hover:bg-slate-800 transition text-left"
+                >
+                  <img src={u.avatar || `https://api.dicebear.com/9.x/thumbs/svg?seed=${u.username}`} alt="" className="w-7 h-7 rounded-full object-cover shrink-0" />
+                  <div>
+                    <p className="text-sm text-white">{u.displayName}</p>
+                    <p className="text-xs text-slate-500">@{u.username}</p>
+                  </div>
+                </button>
+              ))}
+            </div>
+          )}
+        </div>
 
         {/* Image grid */}
         {images.length > 0 && (

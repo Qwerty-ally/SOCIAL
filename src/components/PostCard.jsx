@@ -15,6 +15,20 @@ import {
 import toast from 'react-hot-toast'
 import OwnerBadge from './OwnerBadge'
 
+function renderContent(text) {
+  if (!text) return null
+  return text.split(/(@\w+)/g).map((part, i) => {
+    if (/^@\w+$/.test(part)) {
+      return (
+        <Link key={i} to={`/profile/${part.slice(1)}`} onClick={e => e.stopPropagation()} className="text-sky-400 hover:underline">
+          {part}
+        </Link>
+      )
+    }
+    return <span key={i}>{part}</span>
+  })
+}
+
 function useCountdown(to) {
   const [diff, setDiff] = useState(null)
   useEffect(() => {
@@ -308,8 +322,15 @@ export default function PostCard({ post, onDelete }) {
             </div>
           </div>
 
+          {/* Pending collab badge (author-only) */}
+          {post.collabPending && user?.uid === post.authorId && (
+            <div className="mt-1.5 mb-1 flex items-center gap-1.5 text-xs text-amber-400 bg-amber-500/10 border border-amber-500/20 rounded-full px-3 py-1 w-fit">
+              <Users size={11} /> Waiting for co-author approval
+            </div>
+          )}
+
           {/* Content */}
-          <p className="mt-1.5 text-sm text-slate-200 whitespace-pre-wrap leading-relaxed">{post.content}</p>
+          <p className="mt-1.5 text-sm text-slate-200 whitespace-pre-wrap leading-relaxed">{renderContent(post.content)}</p>
 
           {/* Event card */}
           {post.postType === 'event' && post.eventTitle && (

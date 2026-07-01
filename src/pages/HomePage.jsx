@@ -55,9 +55,10 @@ export default function HomePage() {
     const unsub = onSnapshot(q,
       snap => {
         const all = snap.docs.map(d => ({ id: d.id, ...d.data() }))
-        // Filter out scheduled posts that haven't reached their publish time yet
-        // (only filter out OTHER people's scheduled posts; show your own)
-        setPosts(all.filter(p => !p.publishAt || p.publishAt <= now || p.authorId === profile?.uid))
+        setPosts(all.filter(p => {
+          if (p.collabPending && p.authorId !== profile?.uid) return false
+          return !p.publishAt || p.publishAt <= now || p.authorId === profile?.uid
+        }))
         setLoading(false)
       },
       err => {
