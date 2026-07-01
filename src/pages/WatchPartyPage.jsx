@@ -9,7 +9,7 @@ import { uploadMedia } from '../lib/cloudinary'
 import { useAuth } from '../context/AuthContext'
 import {
   ArrowLeft, Play, Pause, Users, Upload, Loader2, Send,
-  MessageCircle, Radio, Clock, X, Calendar, Plus
+  MessageCircle, Radio, Clock, X, Calendar, Plus, VolumeX, Volume2
 } from 'lucide-react'
 import toast from 'react-hot-toast'
 
@@ -43,6 +43,7 @@ export default function WatchPartyPage() {
   const [messages, setMessages] = useState([])
   const [chatText, setChatText] = useState('')
   const [uploadingMain, setUploadingMain] = useState(false)
+  const [startingSoonMuted, setStartingSoonMuted] = useState(true)
   const [scheduleInput, setScheduleInput] = useState('')
   const [showSchedulePicker, setShowSchedulePicker] = useState(false)
   const [savingSchedule, setSavingSchedule] = useState(false)
@@ -228,7 +229,15 @@ export default function WatchPartyPage() {
         <div className="relative bg-black rounded-2xl overflow-hidden flex-1 min-h-0">
           {isStartingSoon ? (
             party?.startingSoonUrl ? (
-              <video src={party.startingSoonUrl} className="w-full h-full object-contain" autoPlay loop playsInline />
+              <>
+                <video src={party.startingSoonUrl} className="w-full h-full object-contain" autoPlay loop playsInline muted={startingSoonMuted} />
+                <button
+                  onClick={() => setStartingSoonMuted(m => !m)}
+                  className="absolute top-3 right-3 flex items-center gap-1.5 bg-black/70 hover:bg-black/90 text-white text-xs px-3 py-1.5 rounded-full transition"
+                >
+                  {startingSoonMuted ? <><VolumeX size={13} /> Unmute</> : <><Volume2 size={13} /> Mute</>}
+                </button>
+              </>
             ) : (
               <div className="w-full h-full flex flex-col items-center justify-center gap-4">
                 <div className="w-16 h-16 rounded-2xl bg-amber-500/20 flex items-center justify-center">
@@ -421,6 +430,8 @@ function PartyLobby({ navigate, user, profile }) {
     return () => unsub()
   }, [])
 
+  const myActiveParty = parties.find(p => p.hostId === user?.uid)
+
   if (showCreate) return <CreateParty navigate={navigate} user={user} profile={profile} onCancel={() => setShowCreate(false)} />
 
   return (
@@ -431,12 +442,21 @@ function PartyLobby({ navigate, user, profile }) {
           <p className="text-sm text-slate-400">Join an active party or start your own</p>
         </div>
         {!isFan && (
-          <button
-            onClick={() => setShowCreate(true)}
-            className="flex items-center gap-2 px-4 py-2 bg-sky-500 hover:bg-sky-400 text-white rounded-xl text-sm font-semibold transition"
-          >
-            <Plus size={16} /> Create
-          </button>
+          myActiveParty ? (
+            <button
+              onClick={() => navigate(`/watch-party/${myActiveParty.id}`)}
+              className="flex items-center gap-2 px-4 py-2 bg-amber-500 hover:bg-amber-400 text-white rounded-xl text-sm font-semibold transition"
+            >
+              <Radio size={16} /> Your Party
+            </button>
+          ) : (
+            <button
+              onClick={() => setShowCreate(true)}
+              className="flex items-center gap-2 px-4 py-2 bg-sky-500 hover:bg-sky-400 text-white rounded-xl text-sm font-semibold transition"
+            >
+              <Plus size={16} /> Create
+            </button>
+          )
         )}
       </div>
 
