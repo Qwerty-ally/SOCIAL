@@ -32,6 +32,8 @@ export default function GoLivePage() {
   const [activeStreamId, setActiveStreamId] = useState(null)
   const [stageGuests, setStageGuests] = useState([]) // [{ uid, name, avatar, stream }]
   const [invitedUids, setInvitedUids] = useState(new Set())
+  const [viewerList, setViewerList] = useState([])
+  const [showViewers, setShowViewers] = useState(false)
   const videoRef = useRef(null)
   const localStream = useRef(null)
   const streamId = useRef(null)
@@ -77,6 +79,7 @@ export default function GoLivePage() {
       const viewerUnsub = onSnapshot(collection(db, 'streams', ref.id, 'viewers'), snap => {
         const count = snap.docs.length
         setViewerCount(count)
+        setViewerList(snap.docs.map(d => ({ uid: d.id, ...d.data() })))
         updateDoc(doc(db, 'streams', ref.id), { viewerCount: count })
         snap.docChanges().forEach(change => {
           if (change.type === 'added') connectViewer(ref.id, change.doc.id)
@@ -272,9 +275,26 @@ export default function GoLivePage() {
               <span className="bg-red-500 text-white text-xs font-bold px-2 py-1 rounded-full flex items-center gap-1.5">
                 <span className="w-1.5 h-1.5 bg-white rounded-full animate-pulse" />LIVE
               </span>
-              <span className="bg-black/60 text-white text-xs px-2 py-1 rounded-full flex items-center gap-1">
-                <Users size={10} />{viewerCount}
-              </span>
+              <div
+                className="relative"
+                onMouseEnter={() => setShowViewers(true)}
+                onMouseLeave={() => setShowViewers(false)}
+              >
+                <span className="bg-black/60 text-white text-xs px-2 py-1 rounded-full flex items-center gap-1 cursor-pointer select-none">
+                  <Users size={10} />{viewerCount}
+                </span>
+                {showViewers && viewerList.length > 0 && (
+                  <div className="absolute left-0 top-full mt-1.5 bg-[#1e293b] border border-slate-700 rounded-xl shadow-2xl z-30 py-1.5 min-w-44 max-h-64 overflow-y-auto anchor-scrollbar">
+                    <p className="text-[10px] text-slate-500 font-semibold uppercase tracking-wider px-3 pb-1.5">Watching now</p>
+                    {viewerList.map(v => (
+                      <div key={v.uid} className="flex items-center gap-2 px-3 py-1.5">
+                        <img src={v.avatar || `https://api.dicebear.com/9.x/thumbs/svg?seed=${v.uid}`} alt="" className="w-6 h-6 rounded-full object-cover shrink-0" />
+                        <span className="text-sm text-white truncate">{v.displayName || 'Viewer'}</span>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
             </div>
           )}
         </div>

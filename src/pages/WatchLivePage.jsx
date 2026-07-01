@@ -24,10 +24,12 @@ const ICE = {
 
 export default function WatchLivePage() {
   const { streamId } = useParams()
-  const { user } = useAuth()
+  const { user, profile } = useAuth()
   const navigate = useNavigate()
   const [streamData, setStreamData] = useState(null)
   const [connected, setConnected] = useState(false)
+  const [viewerList, setViewerList] = useState([])
+  const [showViewers, setShowViewers] = useState(false)
   const [loading, setLoading] = useState(true)
   const [stageStatus, setStageStatus] = useState(null) // null | 'invited' | 'connecting' | 'on-stage'
   const videoRef = useRef(null)
@@ -74,7 +76,18 @@ export default function WatchLivePage() {
         }
       }
 
-      await setDoc(doc(db, 'streams', streamId, 'viewers', user.uid), { joinedAt: new Date().toISOString() })
+      await setDoc(doc(db, 'streams', streamId, 'viewers', user.uid), {
+        joinedAt: new Date().toISOString(),
+        displayName: profile?.displayName || 'Viewer',
+        username: profile?.username || '',
+        avatar: profile?.avatar || '',
+      })
+
+      // Listen to all viewers for the "who's watching" list
+      const viewersUnsub = onSnapshot(collection(db, 'streams', streamId, 'viewers'), snap => {
+        setViewerList(snap.docs.map(d => ({ uid: d.id, ...d.data() })))
+      })
+      unsubs.current.push(viewersUnsub)
 
       const unsub = onSnapshot(doc(db, 'streams', streamId, 'viewers', user.uid), async snap => {
         const data = snap.data()
@@ -225,8 +238,23 @@ export default function WatchLivePage() {
               <img src={streamData.hostAvatar} alt="" className="w-9 h-9 rounded-full object-cover" />
               <div>
                 <p className="text-white font-semibold text-sm">{streamData.hostName}</p>
-                <div className="flex items-center gap-1 text-xs text-slate-400">
+                <div
+                  className="relative flex items-center gap-1 text-xs text-slate-400 cursor-pointer select-none"
+                  onMouseEnter={() => setShowViewers(true)}
+                  onMouseLeave={() => setShowViewers(false)}
+                >
                   <Users size={10} /> {streamData.viewerCount ?? 0} watching
+                  {showViewers && viewerList.length > 0 && (
+                    <div className="absolute left-0 top-full mt-1.5 bg-[#1e293b] border border-slate-700 rounded-xl shadow-2xl z-30 py-1.5 min-w-44 max-h-64 overflow-y-auto anchor-scrollbar">
+                      <p className="text-[10px] text-slate-500 font-semibold uppercase tracking-wider px-3 pb-1.5">Watching now</p>
+                      {viewerList.map(v => (
+                        <div key={v.uid} className="flex items-center gap-2 px-3 py-1.5">
+                          <img src={v.avatar || `https://api.dicebear.com/9.x/thumbs/svg?seed=${v.uid}`} alt="" className="w-6 h-6 rounded-full object-cover shrink-0" />
+                          <span className="text-sm text-white truncate">{v.displayName || 'Viewer'}</span>
+                        </div>
+                      ))}
+                    </div>
+                  )}
                 </div>
               </div>
             </Link>
