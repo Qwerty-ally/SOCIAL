@@ -517,23 +517,8 @@ export default function ProfilePage() {
         )}
       </div>
 
-      {/* Tabs */}
-      <div className="flex border-b border-slate-700/50">
-        {['posts', 'likes'].map(t => (
-          <button
-            key={t}
-            onClick={() => setTab(t)}
-            className={`flex-1 py-3 text-sm font-medium capitalize border-b-2 transition ${
-              tab === t ? 'border-sky-500 text-white' : 'border-transparent text-slate-500 hover:text-white'
-            }`}
-          >
-            {t}
-          </button>
-        ))}
-      </div>
-
       {/* Content */}
-      {(tab === 'posts' ? posts : likedPosts).map(p => (
+      {posts.map(p => (
         <PostCard key={p.id} post={p} onDelete={id => setPosts(ps => ps.filter(p => p.id !== id))} />
       ))}
 
