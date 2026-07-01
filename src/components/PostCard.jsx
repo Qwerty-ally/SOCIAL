@@ -10,7 +10,7 @@ import { formatDistanceToNow, format } from 'date-fns'
 import {
   Heart, MessageCircle, Repeat2, Bookmark, Share2, MoreHorizontal,
   Trash2, Flag, Link2, Eye, BookImage, MapPin, Calendar, Clock,
-  CheckCircle2, Users
+  CheckCircle2, Users, Edit3
 } from 'lucide-react'
 import toast from 'react-hot-toast'
 import OwnerBadge from './OwnerBadge'
@@ -100,6 +100,10 @@ export default function PostCard({ post, onDelete }) {
   const [views, setViews] = useState(post.views ?? 0)
   const [rsvped, setRsvped] = useState(post.rsvps?.includes(user?.uid))
   const [rsvpCount, setRsvpCount] = useState(post.rsvps?.length ?? 0)
+  const [editingCountdown, setEditingCountdown] = useState(false)
+  const [editLabel, setEditLabel] = useState('')
+  const [editTo, setEditTo] = useState('')
+  const [savingEdit, setSavingEdit] = useState(false)
   const heartRef = useRef(null)
 
   const timeAgo = post.createdAt?.toDate
@@ -222,6 +226,33 @@ export default function PostCard({ post, onDelete }) {
     setShowMenu(false)
   }
 
+  function openCountdownEdit(e) {
+    e.stopPropagation()
+    const raw = post.countdownTo?.toDate ? post.countdownTo.toDate() : new Date(post.countdownTo)
+    const localVal = new Date(raw.getTime() - raw.getTimezoneOffset() * 60000).toISOString().slice(0, 16)
+    setEditLabel(post.countdownLabel || '')
+    setEditTo(localVal)
+    setEditingCountdown(true)
+    setShowMenu(false)
+  }
+
+  async function saveCountdown(e) {
+    e.stopPropagation()
+    if (!editTo) return
+    setSavingEdit(true)
+    try {
+      await updateDoc(doc(db, 'posts', post.id), {
+        countdownTo: new Date(editTo).toISOString(),
+        countdownLabel: editLabel || 'Countdown',
+      })
+      setEditingCountdown(false)
+      toast.success('Countdown updated!')
+    } catch (err) {
+      toast.error(err.message)
+    }
+    setSavingEdit(false)
+  }
+
   function goToPost(e) {
     if (e.target.closest('a, button')) return
     navigate(`/post/${post.id}`)
@@ -313,6 +344,9 @@ export default function PostCard({ post, onDelete }) {
                   {profile?.role !== 'fan' && (
                     <MenuItem icon={<BookImage size={14} />} label="Share to story" onClick={shareToStory} />
                   )}
+                  {post.postType === 'countdown' && user?.uid === post.authorId && (
+                    <MenuItem icon={<Edit3 size={14} />} label="Edit countdown" onClick={openCountdownEdit} />
+                  )}
                   {canDelete
                     ? <MenuItem icon={<Trash2 size={14} />} label="Delete" onClick={deletePost} className="text-red-400" />
                     : <MenuItem icon={<Flag size={14} />} label="Report" onClick={() => { toast('Reported'); setShowMenu(false) }} />
@@ -369,7 +403,40 @@ export default function PostCard({ post, onDelete }) {
 
           {/* Countdown card */}
           {post.postType === 'countdown' && post.countdownTo && (
-            <CountdownDisplay to={post.countdownTo} label={post.countdownLabel} />
+            editingCountdown ? (
+              <div className="mt-3 rounded-xl border border-sky-500/40 bg-[#1e293b] p-4 space-y-2" onClick={e => e.stopPropagation()}>
+                <p className="text-xs text-sky-400 font-semibold mb-1">Edit Countdown</p>
+                <input
+                  value={editLabel}
+                  onChange={e => setEditLabel(e.target.value)}
+                  placeholder="Label (e.g. Album drops in…)"
+                  className="w-full bg-slate-700 border border-slate-600 rounded-lg px-3 py-1.5 text-sm text-white placeholder-slate-500 focus:outline-none focus:ring-1 focus:ring-sky-500"
+                />
+                <input
+                  type="datetime-local"
+                  value={editTo}
+                  onChange={e => setEditTo(e.target.value)}
+                  className="w-full bg-slate-700 border border-slate-600 rounded-lg px-3 py-1.5 text-sm text-white focus:outline-none focus:ring-1 focus:ring-sky-500"
+                />
+                <div className="flex gap-2 pt-1">
+                  <button
+                    onClick={() => setEditingCountdown(false)}
+                    className="flex-1 py-1.5 border border-slate-600 text-slate-300 text-xs font-semibold rounded-lg hover:bg-slate-700 transition"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    onClick={saveCountdown}
+                    disabled={savingEdit || !editTo}
+                    className="flex-1 py-1.5 bg-sky-500 hover:bg-sky-400 text-white text-xs font-semibold rounded-lg transition disabled:opacity-50"
+                  >
+                    {savingEdit ? 'Saving…' : 'Save'}
+                  </button>
+                </div>
+              </div>
+            ) : (
+              <CountdownDisplay to={post.countdownTo} label={post.countdownLabel} />
+            )
           )}
 
           {/* Media */}
