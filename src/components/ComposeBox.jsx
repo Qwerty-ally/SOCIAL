@@ -90,16 +90,17 @@ export default function ComposeBox({ onPost, replyTo = null, autoFocus = false }
   const textareaRef = useRef(null)
 
   useEffect(() => {
-    if (mentionQuery === null || mentionQuery.length < 1) { setMentionResults([]); return }
+    if (mentionQuery === null) { setMentionResults([]); return }
     const id = setTimeout(async () => {
+      const q = mentionQuery.toLowerCase()
       const snap = await getDocs(query(
         collection(db, 'users'),
-        where('username', '>=', mentionQuery.toLowerCase()),
-        where('username', '<=', mentionQuery.toLowerCase() + '￿'),
+        where('username', '>=', q),
+        where('username', '<=', q + '￿'),
         limit(5)
       ))
       setMentionResults(snap.docs.map(d => ({ id: d.id, ...d.data() })).filter(u => u.id !== user?.uid))
-    }, 200)
+    }, 150)
     return () => clearTimeout(id)
   }, [mentionQuery])
 
