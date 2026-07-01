@@ -3,7 +3,7 @@ import { useParams, useNavigate, Link } from 'react-router-dom'
 import { doc, getDoc, setDoc, onSnapshot, addDoc, collection, updateDoc } from 'firebase/firestore'
 import { db } from '../firebase'
 import { useAuth } from '../context/AuthContext'
-import { Users, ArrowLeft, Loader2 } from 'lucide-react'
+import { Users, ArrowLeft, Loader2, Mic, Video, PhoneOff } from 'lucide-react'
 import toast from 'react-hot-toast'
 import StreamChat from '../components/StreamChat'
 
@@ -16,8 +16,11 @@ export default function WatchLivePage() {
   const [streamData, setStreamData] = useState(null)
   const [connected, setConnected] = useState(false)
   const [loading, setLoading] = useState(true)
+  const [stageStatus, setStageStatus] = useState(null) // null | 'invited' | 'connecting' | 'on-stage'
   const videoRef = useRef(null)
   const pc = useRef(null)
+  const stageStream = useRef(null)
+  const stagePc = useRef(null)
   const unsubs = useRef([])
 
   useEffect(() => {
@@ -42,6 +45,7 @@ export default function WatchLivePage() {
       setStreamData(streamInfo)
       setLoading(false)
 
+      // Main viewer connection (receive host stream)
       pc.current = new RTCPeerConnection(ICE)
       const remoteStream = new MediaStream()
 
@@ -57,10 +61,8 @@ export default function WatchLivePage() {
         }
       }
 
-      // Signal to host that we joined
       await setDoc(doc(db, 'streams', streamId, 'viewers', user.uid), { joinedAt: new Date().toISOString() })
 
-      // Wait for host's offer
       const unsub = onSnapshot(doc(db, 'streams', streamId, 'viewers', user.uid), async snap => {
         const data = snap.data()
         if (data?.offer && !pc.current.remoteDescription) {
@@ -74,7 +76,6 @@ export default function WatchLivePage() {
       })
       unsubs.current.push(unsub)
 
-      // Listen for host ICE candidates
       const unsub2 = onSnapshot(collection(db, 'streams', streamId, 'viewers', user.uid, 'hostCandidates'), snap => {
         snap.docChanges().forEach(c => {
           if (c.type === 'added') pc.current?.addIceCandidate(new RTCIceCandidate(c.doc.data()))
@@ -82,7 +83,6 @@ export default function WatchLivePage() {
       })
       unsubs.current.push(unsub2)
 
-      // Listen for stream ending or being blocked
       const unsub3 = onSnapshot(doc(db, 'streams', streamId), snap => {
         if (snap.exists()) setStreamData(snap.data())
         const data = snap.data()
@@ -96,6 +96,26 @@ export default function WatchLivePage() {
       })
       unsubs.current.push(unsub3)
 
+      // Stage invite listener
+      const stageUnsub = onSnapshot(doc(db, 'streams', streamId, 'stageInvites', user.uid), async snap => {
+        if (!snap.exists()) return
+        const data = snap.data()
+        if (data.status === 'pending') {
+          setStageStatus('invited')
+        } else if ((data.status === 'connected') && data.answer && stagePc.current && !stagePc.current.remoteDescription) {
+          await stagePc.current.setRemoteDescription(new RTCSessionDescription(data.answer))
+          setStageStatus('on-stage')
+        } else if (data.status === 'removed') {
+          stageStream.current?.getTracks().forEach(t => t.stop())
+          stageStream.current = null
+          stagePc.current?.close()
+          stagePc.current = null
+          setStageStatus(null)
+          toast('You have been removed from the stage')
+        }
+      })
+      unsubs.current.push(stageUnsub)
+
     } catch (err) {
       console.error(err)
       toast.error('Failed to join stream')
@@ -103,10 +123,74 @@ export default function WatchLivePage() {
     }
   }
 
+  async function acceptInvite() {
+    try {
+      setStageStatus('connecting')
+      const stream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true })
+      stageStream.current = stream
+
+      const spc = new RTCPeerConnection(ICE)
+      stagePc.current = spc
+
+      stream.getTracks().forEach(t => spc.addTrack(t, stream))
+
+      spc.onicecandidate = async e => {
+        if (e.candidate) {
+          await addDoc(collection(db, 'streams', streamId, 'stageInvites', user.uid, 'guestCandidates'), e.candidate.toJSON())
+        }
+      }
+
+      // Listen for host ICE candidates for the stage connection
+      const cUnsub = onSnapshot(collection(db, 'streams', streamId, 'stageInvites', user.uid, 'hostCandidates'), snap => {
+        snap.docChanges().forEach(c => {
+          if (c.type === 'added') stagePc.current?.addIceCandidate(new RTCIceCandidate(c.doc.data())).catch(() => {})
+        })
+      })
+      unsubs.current.push(cUnsub)
+
+      const offer = await spc.createOffer()
+      await spc.setLocalDescription(offer)
+
+      await updateDoc(doc(db, 'streams', streamId, 'stageInvites', user.uid), {
+        status: 'accepted',
+        offer: { type: offer.type, sdp: offer.sdp },
+      })
+    } catch (err) {
+      toast.error('Could not access camera/mic: ' + err.message)
+      setStageStatus(null)
+      stageStream.current?.getTracks().forEach(t => t.stop())
+      stageStream.current = null
+      stagePc.current?.close()
+      stagePc.current = null
+    }
+  }
+
+  async function declineInvite() {
+    setStageStatus(null)
+    try {
+      await updateDoc(doc(db, 'streams', streamId, 'stageInvites', user.uid), { status: 'declined' })
+    } catch {}
+  }
+
+  async function leaveStage() {
+    stageStream.current?.getTracks().forEach(t => t.stop())
+    stageStream.current = null
+    stagePc.current?.close()
+    stagePc.current = null
+    setStageStatus(null)
+    try {
+      await updateDoc(doc(db, 'streams', streamId, 'stageInvites', user.uid), { status: 'removed' })
+    } catch {}
+  }
+
   function cleanup() {
     unsubs.current.forEach(u => u())
     unsubs.current = []
     pc.current?.close()
+    stageStream.current?.getTracks().forEach(t => t.stop())
+    stageStream.current = null
+    stagePc.current?.close()
+    stagePc.current = null
   }
 
   if (loading) return (
@@ -147,6 +231,34 @@ export default function WatchLivePage() {
               <p className="text-slate-400 text-sm">Connecting to stream…</p>
             </div>
           )}
+
+          {/* Self-view PiP when on stage */}
+          {stageStatus === 'on-stage' && (
+            <div className="absolute bottom-3 right-3 z-10">
+              <div className="relative w-32 h-24 rounded-xl overflow-hidden border-2 border-sky-500 shadow-lg shadow-sky-500/30">
+                <video
+                  ref={el => { if (el && stageStream.current) el.srcObject = stageStream.current }}
+                  autoPlay playsInline muted
+                  className="w-full h-full object-cover"
+                />
+                <div className="absolute top-1 left-1 bg-sky-500 text-white text-[9px] font-bold px-1.5 py-0.5 rounded-full">LIVE</div>
+              </div>
+              <button
+                onClick={leaveStage}
+                className="mt-1.5 w-full py-1.5 bg-red-500 hover:bg-red-400 text-white rounded-lg text-xs font-semibold transition flex items-center justify-center gap-1"
+              >
+                <PhoneOff size={11} /> Leave Stage
+              </button>
+            </div>
+          )}
+
+          {/* Connecting to stage indicator */}
+          {stageStatus === 'connecting' && (
+            <div className="absolute bottom-3 right-3 z-10 bg-[#1e293b]/90 backdrop-blur-md rounded-xl px-3 py-2 flex items-center gap-2">
+              <Loader2 size={14} className="animate-spin text-sky-400" />
+              <span className="text-white text-xs font-medium">Joining stage…</span>
+            </div>
+          )}
         </div>
       </div>
 
@@ -154,6 +266,36 @@ export default function WatchLivePage() {
       <div className="w-full lg:w-80 h-64 lg:h-auto">
         <StreamChat streamId={streamId} />
       </div>
+
+      {/* Stage invite dialog */}
+      {stageStatus === 'invited' && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm px-4">
+          <div className="bg-[#1e293b] border border-slate-700 rounded-2xl p-6 max-w-sm w-full text-center shadow-2xl">
+            <div className="w-16 h-16 rounded-full bg-sky-500/20 border border-sky-500/40 flex items-center justify-center mx-auto mb-4">
+              <Mic size={28} className="text-sky-400" />
+            </div>
+            <h2 className="text-white font-bold text-lg mb-1">Stage Invite</h2>
+            <p className="text-slate-400 text-sm mb-2">
+              <span className="text-white font-semibold">{streamData?.hostName}</span> wants you to join the stage with your camera and microphone.
+            </p>
+            <p className="text-slate-500 text-xs mb-6">Your video and audio will be shared with everyone watching this stream.</p>
+            <div className="flex gap-3">
+              <button
+                onClick={declineInvite}
+                className="flex-1 py-2.5 border border-slate-600 text-slate-300 hover:text-white hover:border-slate-500 rounded-xl text-sm font-semibold transition"
+              >
+                Decline
+              </button>
+              <button
+                onClick={acceptInvite}
+                className="flex-1 py-2.5 bg-sky-500 hover:bg-sky-400 text-white rounded-xl text-sm font-semibold transition flex items-center justify-center gap-2"
+              >
+                <Video size={15} /> Accept
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }

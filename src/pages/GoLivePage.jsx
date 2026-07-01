@@ -3,7 +3,7 @@ import { collection, addDoc, serverTimestamp, onSnapshot, updateDoc, doc, setDoc
 import { db } from '../firebase'
 import { useAuth } from '../context/AuthContext'
 import { useNavigate } from 'react-router-dom'
-import { Video, VideoOff, Mic, MicOff, PhoneOff, Users, Radio } from 'lucide-react'
+import { Video, VideoOff, Mic, MicOff, PhoneOff, Users, Radio, UserMinus, Loader2 } from 'lucide-react'
 import toast from 'react-hot-toast'
 import StreamChat from '../components/StreamChat'
 
@@ -17,10 +17,14 @@ export default function GoLivePage() {
   const [camOn, setCamOn] = useState(true)
   const [viewerCount, setViewerCount] = useState(0)
   const [activeStreamId, setActiveStreamId] = useState(null)
+  const [stageGuests, setStageGuests] = useState([]) // [{ uid, name, avatar, stream }]
+  const [invitedUids, setInvitedUids] = useState(new Set())
   const videoRef = useRef(null)
   const localStream = useRef(null)
   const streamId = useRef(null)
   const peerConns = useRef({})
+  const stagePCs = useRef({})
+  const guestStreams = useRef({})
   const unsubs = useRef([])
 
   useEffect(() => {
@@ -39,7 +43,6 @@ export default function GoLivePage() {
   async function startLive() {
     if (!localStream.current) return toast.error('Camera not ready')
     try {
-      // End any existing active streams for this user
       const existing = await getDocs(query(collection(db, 'streams'), where('hostId', '==', user.uid)))
       await Promise.all(existing.docs.filter(d => d.data().active).map(d => updateDoc(d.ref, { active: false })))
 
@@ -57,7 +60,8 @@ export default function GoLivePage() {
       setPhase('live')
       toast.success('You are live!')
 
-      const unsub = onSnapshot(collection(db, 'streams', ref.id, 'viewers'), snap => {
+      // Viewer join listener
+      const viewerUnsub = onSnapshot(collection(db, 'streams', ref.id, 'viewers'), snap => {
         const count = snap.docs.length
         setViewerCount(count)
         updateDoc(doc(db, 'streams', ref.id), { viewerCount: count })
@@ -65,7 +69,23 @@ export default function GoLivePage() {
           if (change.type === 'added') connectViewer(ref.id, change.doc.id)
         })
       })
-      unsubs.current.push(unsub)
+      unsubs.current.push(viewerUnsub)
+
+      // Stage invites listener
+      const stageUnsub = onSnapshot(collection(db, 'streams', ref.id, 'stageInvites'), snap => {
+        snap.docChanges().forEach(change => {
+          const guestUid = change.doc.id
+          const data = change.doc.data()
+          if (data.status === 'accepted' && data.offer && !stagePCs.current[guestUid]) {
+            connectStageGuest(ref.id, guestUid, data)
+          } else if (data.status === 'declined') {
+            toast(`${data.viewerName} declined your stage invite`)
+            setInvitedUids(prev => { const s = new Set(prev); s.delete(guestUid); return s })
+          }
+        })
+      })
+      unsubs.current.push(stageUnsub)
+
     } catch (err) {
       toast.error(err.message)
     }
@@ -92,7 +112,6 @@ export default function GoLivePage() {
       const data = snap.data()
       if (data?.answer && !pc.remoteDescription) {
         await pc.setRemoteDescription(new RTCSessionDescription(data.answer))
-        // Boost bitrate after connection is established
         pc.getSenders().forEach(sender => {
           const params = sender.getParameters()
           if (!params.encodings || params.encodings.length === 0) return
@@ -112,6 +131,83 @@ export default function GoLivePage() {
     unsubs.current.push(unsub2)
   }
 
+  async function inviteToStage(uid, name, avatar) {
+    if (invitedUids.has(uid) || stageGuests.some(g => g.uid === uid)) {
+      return toast.error(`${name} is already on stage or has been invited`)
+    }
+    try {
+      await setDoc(doc(db, 'streams', streamId.current, 'stageInvites', uid), {
+        status: 'pending',
+        viewerName: name,
+        viewerAvatar: avatar || '',
+        invitedAt: serverTimestamp(),
+      })
+      setInvitedUids(prev => new Set([...prev, uid]))
+      toast.success(`Stage invite sent to ${name}`)
+    } catch (err) {
+      toast.error(err.message)
+    }
+  }
+
+  async function connectStageGuest(sid, guestUid, inviteData) {
+    const pc = new RTCPeerConnection(ICE)
+    stagePCs.current[guestUid] = pc
+
+    const remoteStream = new MediaStream()
+
+    pc.ontrack = e => {
+      e.streams[0].getTracks().forEach(t => remoteStream.addTrack(t))
+      guestStreams.current[guestUid] = remoteStream
+      setStageGuests(prev => prev.map(g => g.uid === guestUid ? { ...g, stream: remoteStream } : g))
+    }
+
+    pc.onicecandidate = async e => {
+      if (e.candidate) {
+        await addDoc(collection(db, 'streams', sid, 'stageInvites', guestUid, 'hostCandidates'), e.candidate.toJSON())
+      }
+    }
+
+    // Add guest to list with null stream (connecting placeholder)
+    setStageGuests(prev => [...prev.filter(g => g.uid !== guestUid), { uid: guestUid, name: inviteData.viewerName, avatar: inviteData.viewerAvatar, stream: null }])
+
+    try {
+      await pc.setRemoteDescription(new RTCSessionDescription(inviteData.offer))
+      const answer = await pc.createAnswer()
+      await pc.setLocalDescription(answer)
+      await updateDoc(doc(db, 'streams', sid, 'stageInvites', guestUid), {
+        answer: { type: answer.type, sdp: answer.sdp },
+        status: 'connected',
+      })
+    } catch (err) {
+      toast.error(`Failed to connect ${inviteData.viewerName} to stage`)
+      removeStageGuest(guestUid)
+      return
+    }
+
+    // Listen for guest ICE candidates
+    const cUnsub = onSnapshot(collection(db, 'streams', sid, 'stageInvites', guestUid, 'guestCandidates'), snap => {
+      snap.docChanges().forEach(c => {
+        if (c.type === 'added') pc.addIceCandidate(new RTCIceCandidate(c.doc.data())).catch(() => {})
+      })
+    })
+    unsubs.current.push(cUnsub)
+  }
+
+  async function removeFromStage(guestUid) {
+    try {
+      await updateDoc(doc(db, 'streams', streamId.current, 'stageInvites', guestUid), { status: 'removed' })
+    } catch {}
+    removeStageGuest(guestUid)
+  }
+
+  function removeStageGuest(guestUid) {
+    stagePCs.current[guestUid]?.close()
+    delete stagePCs.current[guestUid]
+    delete guestStreams.current[guestUid]
+    setStageGuests(prev => prev.filter(g => g.uid !== guestUid))
+    setInvitedUids(prev => { const s = new Set(prev); s.delete(guestUid); return s })
+  }
+
   async function endLive() {
     stopAll()
     if (streamId.current) await updateDoc(doc(db, 'streams', streamId.current), { active: false })
@@ -124,6 +220,9 @@ export default function GoLivePage() {
     unsubs.current = []
     Object.values(peerConns.current).forEach(pc => pc.close())
     peerConns.current = {}
+    Object.values(stagePCs.current).forEach(pc => pc.close())
+    stagePCs.current = {}
+    guestStreams.current = {}
     localStream.current?.getTracks().forEach(t => t.stop())
   }
 
@@ -136,6 +235,8 @@ export default function GoLivePage() {
     localStream.current?.getVideoTracks().forEach(t => { t.enabled = !camOn })
     setCamOn(c => !c)
   }
+
+  const stagedUids = new Set([...invitedUids, ...stageGuests.map(g => g.uid)])
 
   return (
     <div className="flex flex-col lg:flex-row gap-4 p-4 h-[calc(100dvh-4rem)]">
@@ -184,12 +285,58 @@ export default function GoLivePage() {
             {camOn ? <Video size={20} /> : <VideoOff size={20} />}
           </button>
         </div>
+
+        {/* Stage guests strip */}
+        {stageGuests.length > 0 && (
+          <div className="mt-4">
+            <p className="text-xs text-slate-500 font-semibold uppercase tracking-wider mb-2 flex items-center gap-1.5">
+              <Mic size={11} className="text-sky-400" /> On Stage ({stageGuests.length})
+            </p>
+            <div className="flex gap-3 flex-wrap">
+              {stageGuests.map(g => (
+                <div key={g.uid} className="relative">
+                  <div className="w-44 h-32 bg-black rounded-xl overflow-hidden">
+                    {g.stream ? (
+                      <video
+                        ref={el => { if (el && g.stream) el.srcObject = g.stream }}
+                        autoPlay
+                        playsInline
+                        className="w-full h-full object-cover"
+                      />
+                    ) : (
+                      <div className="w-full h-full flex flex-col items-center justify-center gap-2">
+                        <Loader2 size={20} className="animate-spin text-sky-400" />
+                        <p className="text-slate-500 text-xs">Connecting…</p>
+                      </div>
+                    )}
+                  </div>
+                  <div className="absolute bottom-2 left-2 flex items-center gap-1.5 bg-black/70 backdrop-blur-sm px-2 py-0.5 rounded-full">
+                    <img src={g.avatar || `https://api.dicebear.com/9.x/thumbs/svg?seed=${g.uid}`} alt="" className="w-4 h-4 rounded-full object-cover" />
+                    <span className="text-white text-xs font-medium truncate max-w-20">{g.name}</span>
+                  </div>
+                  <button
+                    onClick={() => removeFromStage(g.uid)}
+                    className="absolute top-2 right-2 bg-red-500 hover:bg-red-400 text-white rounded-full p-1 transition"
+                    title="Remove from stage"
+                  >
+                    <UserMinus size={12} />
+                  </button>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
       </div>
 
-      {/* Chat — only visible during live */}
+      {/* Chat */}
       {phase === 'live' && activeStreamId && (
         <div className="w-full lg:w-80 h-64 lg:h-auto">
-          <StreamChat streamId={activeStreamId} isHost={true} />
+          <StreamChat
+            streamId={activeStreamId}
+            isHost={true}
+            onInviteToStage={inviteToStage}
+            stagedUids={stagedUids}
+          />
         </div>
       )}
     </div>

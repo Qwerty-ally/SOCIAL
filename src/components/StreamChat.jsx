@@ -2,10 +2,10 @@ import { useState, useEffect, useRef } from 'react'
 import { collection, query, orderBy, limit, onSnapshot, addDoc, serverTimestamp, doc, updateDoc, arrayUnion } from 'firebase/firestore'
 import { db } from '../firebase'
 import { useAuth } from '../context/AuthContext'
-import { Send, MessageCircle, Ban } from 'lucide-react'
+import { Send, MessageCircle, Ban, Mic } from 'lucide-react'
 import toast from 'react-hot-toast'
 
-export default function StreamChat({ streamId, isHost }) {
+export default function StreamChat({ streamId, isHost, onInviteToStage, stagedUids }) {
   const { user, profile } = useAuth()
   const [messages, setMessages] = useState([])
   const [text, setText] = useState('')
@@ -64,13 +64,25 @@ export default function StreamChat({ streamId, isHost }) {
               <span className="text-[13px] text-slate-200 break-words">{m.text}</span>
             </div>
             {isHost && m.uid !== user?.uid && (
-              <button
-                onClick={() => blockUser(m.uid, m.displayName)}
-                className="opacity-0 group-hover:opacity-100 p-1 rounded-full text-slate-600 hover:text-red-400 hover:bg-red-400/10 transition shrink-0"
-                title="Block from stream"
-              >
-                <Ban size={12} />
-              </button>
+              <div className="opacity-0 group-hover:opacity-100 flex items-center gap-0.5 transition shrink-0">
+                {onInviteToStage && (
+                  <button
+                    onClick={() => onInviteToStage(m.uid, m.displayName, m.avatar)}
+                    disabled={stagedUids?.has(m.uid)}
+                    className="p-1 rounded-full text-slate-600 hover:text-sky-400 hover:bg-sky-400/10 transition disabled:opacity-30 disabled:cursor-not-allowed"
+                    title={stagedUids?.has(m.uid) ? 'Already on stage' : 'Invite to stage'}
+                  >
+                    <Mic size={12} />
+                  </button>
+                )}
+                <button
+                  onClick={() => blockUser(m.uid, m.displayName)}
+                  className="p-1 rounded-full text-slate-600 hover:text-red-400 hover:bg-red-400/10 transition"
+                  title="Block from stream"
+                >
+                  <Ban size={12} />
+                </button>
+              </div>
             )}
           </div>
         ))}

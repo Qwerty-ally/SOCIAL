@@ -588,10 +588,8 @@ export default function ComposeBox({ onPost, replyTo = null, autoFocus = false }
             <input type="file" ref={audioRef} accept="audio/*" onChange={pickAudio} className="hidden" />
 
             {!(profile?.role === 'fan' && replyTo) && (
-              <ToolBtn icon={<Image size={18} />} onClick={() => imageRef.current.click()} label="Photos" disabled={!!videoFile || images.length >= MAX_IMAGES} />
-            )}
-            {profile?.role !== 'fan' && (
               <>
+                <ToolBtn icon={<Image size={18} />} onClick={() => imageRef.current.click()} label="Photos" disabled={!!videoFile || images.length >= MAX_IMAGES} />
                 <ToolBtn icon={<Video size={18} />} onClick={() => videoRef.current.click()} label="Video" disabled={images.length > 0 || !!videoFile} />
                 <ToolBtn icon={<Music size={18} />} onClick={() => audioRef.current.click()} label="Audio" disabled={!!audioFile} />
               </>
