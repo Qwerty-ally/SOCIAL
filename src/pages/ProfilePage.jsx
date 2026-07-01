@@ -11,11 +11,12 @@ import { useAuth } from '../context/AuthContext'
 import PostCard from '../components/PostCard'
 import {
   ArrowLeft, Camera, MapPin, Calendar, Edit3, Loader2, X, Crown,
-  Music, Play, Pause, BarChart2, Users, UserMinus, UserPlus, Check
+  Music, Play, Pause, BarChart2, Users, UserMinus, UserPlus, Check, Palette
 } from 'lucide-react'
 import OwnerBadge from '../components/OwnerBadge'
 import { format, formatDistanceToNow } from 'date-fns'
 import toast from 'react-hot-toast'
+import { useTheme, themes } from '../context/ThemeContext'
 
 function isOnline(lastSeen) {
   if (!lastSeen) return false
@@ -50,6 +51,10 @@ export default function ProfilePage() {
 
   // Creator stats
   const [stats, setStats] = useState(null)
+
+  // Mobile theme picker
+  const [showThemePicker, setShowThemePicker] = useState(false)
+  const { theme: activeTheme, setTheme } = useTheme()
 
   const isMe = myProfile?.username === username
   const amOwner = myProfile?.role === 'owner'
@@ -349,9 +354,19 @@ export default function ProfilePage() {
                   </button>
                 </div>
               ) : (
-                <button onClick={() => { setEditing(true); setEditForm({ displayName: profile.displayName, bio: profile.bio, location: profile.location, bannerColor: profile.bannerColor }) }} className="px-4 py-1.5 rounded-full border border-slate-600 text-slate-300 text-sm font-medium hover:bg-slate-800 transition flex items-center gap-1.5">
-                  <Edit3 size={14} /> Edit Profile
-                </button>
+                <div className="flex gap-2 items-center">
+                  <button onClick={() => { setEditing(true); setEditForm({ displayName: profile.displayName, bio: profile.bio, location: profile.location, bannerColor: profile.bannerColor }) }} className="px-4 py-1.5 rounded-full border border-slate-600 text-slate-300 text-sm font-medium hover:bg-slate-800 transition flex items-center gap-1.5">
+                    <Edit3 size={14} /> Edit Profile
+                  </button>
+                  {/* Theme picker — mobile only (sidebar has it on desktop) */}
+                  <button
+                    onClick={() => setShowThemePicker(true)}
+                    className="md:hidden p-2 rounded-full border border-slate-600 text-slate-300 hover:bg-slate-800 transition"
+                    title="Theme"
+                  >
+                    <Palette size={16} />
+                  </button>
+                </div>
               )
             ) : (
               <div className="flex gap-2">
@@ -557,6 +572,41 @@ export default function ProfilePage() {
             </div>
           )}
         </Modal>
+      )}
+
+      {/* Mobile theme picker bottom sheet */}
+      {showThemePicker && (
+        <div className="fixed inset-0 z-50 md:hidden flex flex-col justify-end">
+          <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={() => setShowThemePicker(false)} />
+          <div className="relative bg-[#1e293b] rounded-t-3xl p-5 max-h-[80vh] overflow-y-auto anchor-scrollbar">
+            <div className="flex items-center justify-between mb-4">
+              <h2 className="text-white font-bold text-lg flex items-center gap-2"><Palette size={18} className="text-sky-400" /> Theme</h2>
+              <button onClick={() => setShowThemePicker(false)} className="text-slate-400 hover:text-white p-1"><X size={20} /></button>
+            </div>
+            <p className="text-xs text-slate-500 font-semibold uppercase tracking-wider mb-2">Dark Themes</p>
+            <div className="space-y-1 mb-4">
+              {Object.entries(themes).filter(([, t]) => t.type === 'dark').map(([id, t]) => (
+                <button key={id} onClick={() => { setTheme(id); setShowThemePicker(false) }}
+                  className={`flex items-center gap-3 w-full px-3 py-2.5 rounded-xl transition ${activeTheme === id ? 'bg-slate-700' : 'hover:bg-slate-700/50'}`}>
+                  <div className="w-5 h-5 rounded-full border-2 border-white/20 shrink-0" style={{ background: t.bg, boxShadow: `inset 0 0 0 2px ${t.accent}` }} />
+                  <span className="text-sm text-white flex-1 text-left">{t.emoji} {t.name}</span>
+                  {activeTheme === id && <Check size={14} className="text-sky-400 shrink-0" />}
+                </button>
+              ))}
+            </div>
+            <p className="text-xs text-slate-500 font-semibold uppercase tracking-wider mb-2">Pastel Themes</p>
+            <div className="space-y-1">
+              {Object.entries(themes).filter(([, t]) => t.type === 'light').map(([id, t]) => (
+                <button key={id} onClick={() => { setTheme(id); setShowThemePicker(false) }}
+                  className={`flex items-center gap-3 w-full px-3 py-2.5 rounded-xl transition ${activeTheme === id ? 'bg-slate-700' : 'hover:bg-slate-700/50'}`}>
+                  <div className="w-5 h-5 rounded-full border-2 border-white/20 shrink-0" style={{ background: t.bg, boxShadow: `inset 0 0 0 2px ${t.accent}` }} />
+                  <span className="text-sm text-white flex-1 text-left">{t.emoji} {t.name}</span>
+                  {activeTheme === id && <Check size={14} className="text-sky-400 shrink-0" />}
+                </button>
+              ))}
+            </div>
+          </div>
+        </div>
       )}
 
       {/* Creator stats modal */}

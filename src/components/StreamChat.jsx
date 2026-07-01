@@ -64,7 +64,7 @@ export default function StreamChat({ streamId, isHost, onInviteToStage, stagedUi
               <span className="text-[13px] text-slate-200 break-words">{m.text}</span>
             </div>
             {isHost && m.uid !== user?.uid && (
-              <div className="opacity-0 group-hover:opacity-100 flex items-center gap-0.5 transition shrink-0">
+              <div className="md:opacity-0 md:group-hover:opacity-100 flex items-center gap-0.5 transition shrink-0">
                 {onInviteToStage && (
                   <button
                     onClick={() => onInviteToStage(m.uid, m.displayName, m.avatar)}
