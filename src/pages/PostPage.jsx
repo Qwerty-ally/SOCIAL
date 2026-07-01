@@ -9,7 +9,7 @@ import ComposeBox from '../components/ComposeBox'
 import { ArrowLeft, Loader2 } from 'lucide-react'
 import { useAuth } from '../context/AuthContext'
 import { formatDistanceToNow } from 'date-fns'
-import { Heart, Trash2 } from 'lucide-react'
+import { Heart, Trash2, Reply } from 'lucide-react'
 import {
   arrayUnion, arrayRemove, updateDoc, deleteDoc, addDoc,
   serverTimestamp, increment
@@ -23,6 +23,7 @@ export default function PostPage() {
   const [post, setPost] = useState(null)
   const [comments, setComments] = useState([])
   const [loading, setLoading] = useState(true)
+  const [replyingTo, setReplyingTo] = useState(null)
 
   useEffect(() => {
     getDoc(doc(db, 'posts', id)).then(snap => {
@@ -61,22 +62,36 @@ export default function PostPage() {
       <PostCard post={post} onDelete={() => navigate('/')} />
 
       <div className="border-b border-slate-700/50">
-        <ComposeBox replyTo={post} onPost={() => {}} autoFocus />
+        <ComposeBox replyTo={replyingTo || post} onPost={() => setReplyingTo(null)} autoFocus />
       </div>
+
+      {replyingTo && (
+        <div className="px-4 py-2 bg-sky-500/10 border-b border-sky-500/20 flex items-center justify-between">
+          <p className="text-xs text-sky-400">Replying to @{replyingTo.authorUsername}</p>
+          <button onClick={() => setReplyingTo(null)} className="text-xs text-slate-500 hover:text-white transition">Cancel</button>
+        </div>
+      )}
 
       <div>
         <div className="px-4 py-2 text-xs text-slate-500 font-semibold uppercase tracking-wider border-b border-slate-700/50">
           {comments.length} {comments.length === 1 ? 'Reply' : 'Replies'}
         </div>
         {comments.map(c => (
-          <Comment key={c.id} comment={c} postId={id} user={user} profile={profile} />
+          <Comment
+            key={c.id}
+            comment={c}
+            postId={id}
+            user={user}
+            profile={profile}
+            onReply={() => setReplyingTo(c)}
+          />
         ))}
       </div>
     </div>
   )
 }
 
-function Comment({ comment, postId, user, profile }) {
+function Comment({ comment, postId, user, profile, onReply }) {
   const [liked, setLiked] = useState(comment.likes?.includes(user?.uid))
   const [likeCount, setLikeCount] = useState(comment.likes?.length ?? 0)
 
@@ -104,6 +119,8 @@ function Comment({ comment, postId, user, profile }) {
     toast.success('Reply deleted')
   }
 
+  const canDelete = user?.uid === comment.authorId || profile?.role === 'owner'
+
   return (
     <div className="flex gap-3 px-4 py-4 border-b border-slate-700/30 animate-fade-in">
       <img
@@ -112,25 +129,38 @@ function Comment({ comment, postId, user, profile }) {
         className="w-9 h-9 rounded-full object-cover flex-shrink-0"
       />
       <div className="flex-1 min-w-0">
-        <div className="flex items-center gap-1.5">
+        <div className="flex items-center gap-1.5 flex-wrap">
           <span className="text-sm font-semibold text-white">{comment.authorName}</span>
           <span className="text-xs text-slate-500">@{comment.authorUsername}</span>
           <span className="text-xs text-slate-600">·</span>
           <span className="text-xs text-slate-500">{timeAgo}</span>
-          {user?.uid === comment.authorId && (
+          {canDelete && (
             <button onClick={deleteComment} className="ml-auto text-slate-600 hover:text-red-400 transition">
               <Trash2 size={14} />
             </button>
           )}
         </div>
+        {comment.replyTo && comment.replyToAuthor && (
+          <p className="text-xs text-slate-500 mt-0.5">↳ replying to @{comment.replyToAuthor}</p>
+        )}
         <p className="text-sm text-slate-200 mt-1 leading-relaxed">{comment.content}</p>
         {comment.imageUrl && (
           <img src={comment.imageUrl} alt="" className="mt-2 rounded-xl max-h-48 object-cover border border-slate-700" />
         )}
-        <button onClick={toggleLike} className={`flex items-center gap-1 mt-2 text-sm transition ${liked ? 'text-red-400' : 'text-slate-500 hover:text-red-400'}`}>
-          <Heart size={15} className={liked ? 'fill-red-400' : ''} />
-          {likeCount > 0 && <span>{likeCount}</span>}
-        </button>
+        <div className="flex items-center gap-4 mt-2">
+          <button onClick={toggleLike} className={`flex items-center gap-1 text-sm transition ${liked ? 'text-red-400' : 'text-slate-500 hover:text-red-400'}`}>
+            <Heart size={15} className={liked ? 'fill-red-400' : ''} />
+            {likeCount > 0 && <span>{likeCount}</span>}
+          </button>
+          {user && profile?.role !== 'fan' && (
+            <button
+              onClick={onReply}
+              className="flex items-center gap-1 text-xs text-slate-500 hover:text-sky-400 transition"
+            >
+              <Reply size={13} /> Reply
+            </button>
+          )}
+        </div>
       </div>
     </div>
   )

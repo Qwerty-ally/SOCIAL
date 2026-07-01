@@ -1,11 +1,14 @@
 import { useState, useEffect, useRef } from 'react'
 import {
   collection, query, where, orderBy, onSnapshot, addDoc,
-  serverTimestamp, getDocs, limit, doc, updateDoc, deleteDoc, or
+  serverTimestamp, getDocs, limit, doc, updateDoc, deleteDoc
 } from 'firebase/firestore'
 import { db } from '../firebase'
 import { useAuth } from '../context/AuthContext'
-import { Search, Send, MessageCircle, Loader2, ArrowLeft, Users, Plus, X, Check, Settings, UserMinus, UserPlus, Trash2 } from 'lucide-react'
+import {
+  Search, Send, MessageCircle, Loader2, ArrowLeft, Users, X,
+  Check, Settings, UserMinus, UserPlus, Trash2, CheckCheck
+} from 'lucide-react'
 import { formatDistanceToNow } from 'date-fns'
 import toast from 'react-hot-toast'
 
@@ -38,12 +41,22 @@ export default function MessagesPage() {
 
   useEffect(() => {
     if (!activeConvo) return
+    // Mark as read when opening
+    markRead(activeConvo.id)
+
     const q = query(collection(db, 'conversations', activeConvo.id, 'messages'), orderBy('createdAt', 'asc'), limit(100))
     return onSnapshot(q, snap => {
       setMessages(snap.docs.map(d => ({ id: d.id, ...d.data() })))
       setTimeout(() => bottomRef.current?.scrollIntoView({ behavior: 'smooth' }), 100)
     })
-  }, [activeConvo])
+  }, [activeConvo?.id])
+
+  function markRead(convoId) {
+    if (!user || !convoId) return
+    updateDoc(doc(db, 'conversations', convoId), {
+      [`lastReadBy.${user.uid}`]: serverTimestamp(),
+    }).catch(() => {})
+  }
 
   async function searchUsers(e) {
     e.preventDefault()
@@ -65,6 +78,7 @@ export default function MessagesPage() {
       isGroup: false,
       lastMessage: '',
       lastMessageAt: serverTimestamp(),
+      lastReadBy: { [user.uid]: serverTimestamp() },
     })
     setActiveConvo({ id: ref.id, participants: [user.uid, otherUser.id], participantProfiles: {
       [user.uid]: { displayName: profile?.displayName, avatar: profile?.avatar, username: profile?.username },
@@ -81,7 +95,11 @@ export default function MessagesPage() {
     await addDoc(collection(db, 'conversations', activeConvo.id, 'messages'), {
       text: msg, senderId: user.uid, senderName: profile?.displayName, createdAt: serverTimestamp(),
     })
-    await updateDoc(doc(db, 'conversations', activeConvo.id), { lastMessage: msg, lastMessageAt: serverTimestamp() })
+    await updateDoc(doc(db, 'conversations', activeConvo.id), {
+      lastMessage: msg,
+      lastMessageAt: serverTimestamp(),
+      [`lastReadBy.${user.uid}`]: serverTimestamp(),
+    })
   }
 
   const otherProfile = (convo) => {
@@ -89,6 +107,8 @@ export default function MessagesPage() {
     const otherId = convo.participants.find(p => p !== user?.uid)
     return convo.participantProfiles?.[otherId]
   }
+
+  const otherUid = (convo) => convo.participants.find(p => p !== user?.uid)
 
   const convoName = (convo) => {
     if (convo.isGroup) return convo.groupName || 'Group'
@@ -99,6 +119,27 @@ export default function MessagesPage() {
     if (convo.isGroup) return null
     const op = otherProfile(convo)
     return op?.avatar || `https://api.dicebear.com/9.x/thumbs/svg?seed=${op?.username}`
+  }
+
+  // Has unread messages?
+  const hasUnread = (convo) => {
+    if (!convo.lastMessageAt || !convo.lastReadBy) return false
+    const myLastRead = convo.lastReadBy[user?.uid]
+    if (!myLastRead) return !!convo.lastMessage
+    const lastAt = convo.lastMessageAt?.toDate?.() ?? new Date(convo.lastMessageAt)
+    const readAt = myLastRead?.toDate?.() ?? new Date(myLastRead)
+    return lastAt > readAt && convo.lastSenderId !== user?.uid
+  }
+
+  // Did other person read my last message?
+  const otherSawLastMsg = (convo) => {
+    if (!convo.lastMessageAt || !convo.lastReadBy) return false
+    const uid = otherUid(convo)
+    const theirRead = convo.lastReadBy?.[uid]
+    if (!theirRead) return false
+    const lastAt = convo.lastMessageAt?.toDate?.() ?? new Date(convo.lastMessageAt)
+    const readAt = theirRead?.toDate?.() ?? new Date(theirRead)
+    return readAt >= lastAt
   }
 
   return (
@@ -140,36 +181,40 @@ export default function MessagesPage() {
             </div>
           ) : conversations.length === 0 ? (
             <p className="text-center text-slate-500 text-sm py-8">No conversations yet.</p>
-          ) : conversations.map(c => (
-            <button key={c.id} onClick={() => setActiveConvo(c)}
-              className={`flex items-center gap-3 w-full px-4 py-3 hover:bg-slate-800 transition text-left ${activeConvo?.id === c.id ? 'bg-slate-800' : ''}`}>
-              {c.isGroup ? (
-                <div className="w-10 h-10 rounded-full bg-sky-500/20 border border-sky-500/40 flex items-center justify-center shrink-0">
-                  <Users size={16} className="text-sky-400" />
+          ) : conversations.map(c => {
+            const unread = hasUnread(c)
+            return (
+              <button key={c.id} onClick={() => setActiveConvo(c)}
+                className={`flex items-center gap-3 w-full px-4 py-3 hover:bg-slate-800 transition text-left ${activeConvo?.id === c.id ? 'bg-slate-800' : ''}`}>
+                {c.isGroup ? (
+                  <div className="w-10 h-10 rounded-full bg-sky-500/20 border border-sky-500/40 flex items-center justify-center shrink-0">
+                    <Users size={16} className="text-sky-400" />
+                  </div>
+                ) : (
+                  <img src={convoAvatar(c)} alt="" className="w-10 h-10 rounded-full object-cover shrink-0" />
+                )}
+                <div className="flex-1 min-w-0">
+                  <p className={`text-sm truncate ${unread ? 'font-bold text-white' : 'font-semibold text-white'}`}>{convoName(c)}</p>
+                  <p className={`text-xs truncate ${unread ? 'text-white' : 'text-slate-500'}`}>{c.lastMessage || 'No messages yet'}</p>
                 </div>
-              ) : (
-                <img src={convoAvatar(c)} alt="" className="w-10 h-10 rounded-full object-cover shrink-0" />
-              )}
-              <div className="flex-1 min-w-0">
-                <p className="text-sm font-semibold text-white truncate">{convoName(c)}</p>
-                <p className="text-xs text-slate-500 truncate">{c.lastMessage || 'No messages yet'}</p>
-              </div>
-            </button>
-          ))}
+                {unread && <span className="w-2 h-2 rounded-full bg-sky-400 shrink-0" />}
+              </button>
+            )
+          })}
         </div>
       </div>
 
       {/* Chat window */}
       {activeConvo ? (
         <div className="flex-1 flex flex-col min-w-0">
-          <div className="px-4 py-3 border-b border-slate-700/50 flex items-center gap-3">
+          <div className="px-4 py-3 border-b border-slate-700/50 flex items-center gap-3 shrink-0">
             <button onClick={() => setActiveConvo(null)} className="md:hidden p-1 text-slate-400 hover:text-white"><ArrowLeft size={20} /></button>
             {activeConvo.isGroup ? (
-              <div className="w-9 h-9 rounded-full bg-sky-500/20 border border-sky-500/40 flex items-center justify-center">
+              <div className="w-9 h-9 rounded-full bg-sky-500/20 border border-sky-500/40 flex items-center justify-center shrink-0">
                 <Users size={16} className="text-sky-400" />
               </div>
             ) : (
-              <img src={convoAvatar(activeConvo)} alt="" className="w-9 h-9 rounded-full object-cover" />
+              <img src={convoAvatar(activeConvo)} alt="" className="w-9 h-9 rounded-full object-cover shrink-0" />
             )}
             <div className="flex-1 min-w-0">
               <p className="text-sm font-semibold text-white">{convoName(activeConvo)}</p>
@@ -184,9 +229,11 @@ export default function MessagesPage() {
             )}
           </div>
 
-          <div className="flex-1 overflow-y-auto anchor-scrollbar p-4 space-y-3">
-            {messages.map(m => {
+          <div className="flex-1 overflow-y-auto anchor-scrollbar p-4 space-y-3 min-h-0">
+            {messages.map((m, idx) => {
               const isMe = m.senderId === user.uid
+              const isLast = idx === messages.length - 1
+              const seen = isMe && isLast && !activeConvo.isGroup && otherSawLastMsg(activeConvo)
               return (
                 <div key={m.id} className={`flex flex-col ${isMe ? 'items-end' : 'items-start'}`}>
                   {activeConvo.isGroup && !isMe && (
@@ -198,16 +245,21 @@ export default function MessagesPage() {
                       {m.createdAt?.toDate ? formatDistanceToNow(m.createdAt.toDate(), { addSuffix: true }) : ''}
                     </div>
                   </div>
+                  {seen && (
+                    <p className="text-[10px] text-slate-500 mt-0.5 flex items-center gap-1">
+                      <CheckCheck size={11} className="text-sky-400" /> Seen
+                    </p>
+                  )}
                 </div>
               )
             })}
             <div ref={bottomRef} />
           </div>
 
-          <form onSubmit={sendMessage} className="p-4 border-t border-slate-700/50 flex gap-2 items-end">
+          <form onSubmit={sendMessage} className="p-4 border-t border-slate-700/50 flex gap-2 items-end shrink-0">
             <textarea value={text} onChange={e => setText(e.target.value)}
               onKeyDown={e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendMessage(e) } }}
-              placeholder="Type a message…" rows={3}
+              placeholder="Type a message…" rows={2}
               className="flex-1 bg-slate-800 border border-slate-700 rounded-2xl px-4 py-3 text-sm text-white placeholder-slate-500 focus:outline-none focus:border-sky-500 transition resize-none" />
             <button type="submit" disabled={!text.trim()}
               className="w-10 h-10 flex items-center justify-center rounded-full bg-sky-500 hover:bg-sky-400 text-white transition disabled:opacity-40">
@@ -225,13 +277,11 @@ export default function MessagesPage() {
         </div>
       )}
 
-      {/* Group creation modal */}
       {showGroupModal && (
         <GroupModal user={user} profile={profile} conversations={conversations} onClose={() => setShowGroupModal(false)}
           onCreated={convo => { setActiveConvo(convo); setShowGroupModal(false) }} />
       )}
 
-      {/* Group settings modal */}
       {showGroupSettings && activeConvo?.isGroup && (
         <GroupSettingsModal
           convo={activeConvo}
@@ -291,16 +341,13 @@ function GroupModal({ user, profile, onClose, onCreated }) {
           <h2 className="font-semibold text-white flex items-center gap-2"><Users size={18} className="text-sky-400" /> New Group</h2>
           <button onClick={onClose} className="text-slate-400 hover:text-white"><X size={18} /></button>
         </div>
-
         <input value={groupName} onChange={e => setGroupName(e.target.value)} placeholder="Group name"
           className="w-full bg-slate-800 border border-slate-700 rounded-xl px-3 py-2 text-sm text-white placeholder-slate-500 focus:outline-none focus:border-sky-500" />
-
         <form onSubmit={search} className="relative">
           <Search size={13} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-500" />
           <input value={searchQ} onChange={e => setSearchQ(e.target.value)} placeholder="Search users to add…"
             className="w-full bg-slate-800 border border-slate-700 rounded-xl pl-8 pr-3 py-2 text-sm text-white placeholder-slate-500 focus:outline-none focus:border-sky-500" />
         </form>
-
         {selected.length > 0 && (
           <div className="flex flex-wrap gap-1.5">
             {selected.map(u => (
@@ -310,7 +357,6 @@ function GroupModal({ user, profile, onClose, onCreated }) {
             ))}
           </div>
         )}
-
         <div className="space-y-1 max-h-48 overflow-y-auto anchor-scrollbar">
           {results.map(u => (
             <button key={u.id} onClick={() => toggle(u)}
@@ -324,7 +370,6 @@ function GroupModal({ user, profile, onClose, onCreated }) {
             </button>
           ))}
         </div>
-
         <button onClick={create} disabled={creating}
           className="w-full py-2.5 bg-sky-500 hover:bg-sky-400 text-white rounded-xl font-semibold text-sm transition disabled:opacity-50">
           {creating ? 'Creating…' : `Create Group (${selected.length + 1} members)`}
@@ -340,7 +385,7 @@ function GroupSettingsModal({ convo, currentUserId, onClose, onUpdate, onDelete 
   const [saving, setSaving] = useState(false)
 
   async function deleteGroup() {
-    if (!confirm('Delete this group for everyone? This cannot be undone.')) return
+    if (!confirm('Delete this group for everyone?')) return
     setSaving(true)
     await deleteDoc(doc(db, 'conversations', convo.id))
     toast.success('Group deleted')
@@ -388,13 +433,10 @@ function GroupSettingsModal({ convo, currentUserId, onClose, onUpdate, onDelete 
           <h2 className="font-semibold text-white flex items-center gap-2"><Settings size={16} className="text-sky-400" /> Manage Group</h2>
           <button onClick={onClose} className="text-slate-400 hover:text-white"><X size={18} /></button>
         </div>
-
         <button onClick={deleteGroup} disabled={saving}
           className="w-full flex items-center justify-center gap-2 py-2 rounded-xl border border-red-500/40 text-red-400 hover:bg-red-500/10 text-sm font-semibold transition disabled:opacity-50">
           <Trash2 size={14} /> Delete Group
         </button>
-
-        {/* Current members */}
         <div>
           <p className="text-xs text-slate-500 font-semibold uppercase tracking-wider mb-2">Members ({members.length})</p>
           <div className="space-y-1 max-h-48 overflow-y-auto anchor-scrollbar">
@@ -405,20 +447,14 @@ function GroupSettingsModal({ convo, currentUserId, onClose, onUpdate, onDelete 
                   <p className="text-sm font-medium text-white truncate">{p.displayName}</p>
                   <p className="text-xs text-slate-500">@{p.username}</p>
                 </div>
-                <button
-                  onClick={() => removeMember(uid)}
-                  disabled={saving}
-                  className="p-1.5 rounded-full text-slate-500 hover:text-red-400 hover:bg-red-400/10 transition"
-                  title={uid === currentUserId ? 'Leave group' : 'Remove'}
-                >
+                <button onClick={() => removeMember(uid)} disabled={saving}
+                  className="p-1.5 rounded-full text-slate-500 hover:text-red-400 hover:bg-red-400/10 transition">
                   <UserMinus size={14} />
                 </button>
               </div>
             ))}
           </div>
         </div>
-
-        {/* Add members */}
         <div>
           <p className="text-xs text-slate-500 font-semibold uppercase tracking-wider mb-2">Add Member</p>
           <form onSubmit={search} className="relative mb-2">
@@ -434,7 +470,8 @@ function GroupSettingsModal({ convo, currentUserId, onClose, onUpdate, onDelete 
                   <p className="text-sm font-medium text-white truncate">{u.displayName}</p>
                   <p className="text-xs text-slate-500">@{u.username}</p>
                 </div>
-                <button onClick={() => addMember(u)} disabled={saving} className="p-1.5 rounded-full text-slate-500 hover:text-sky-400 hover:bg-sky-400/10 transition">
+                <button onClick={() => addMember(u)} disabled={saving}
+                  className="p-1.5 rounded-full text-slate-500 hover:text-sky-400 hover:bg-sky-400/10 transition">
                   <UserPlus size={14} />
                 </button>
               </div>

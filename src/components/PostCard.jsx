@@ -1,4 +1,4 @@
-import { useState, useRef } from 'react'
+import { useState, useRef, useEffect } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import {
   doc, updateDoc, arrayUnion, arrayRemove, deleteDoc,
@@ -6,13 +6,73 @@ import {
 } from 'firebase/firestore'
 import { db } from '../firebase'
 import { useAuth } from '../context/AuthContext'
-import { formatDistanceToNow } from 'date-fns'
+import { formatDistanceToNow, format } from 'date-fns'
 import {
   Heart, MessageCircle, Repeat2, Bookmark, Share2, MoreHorizontal,
-  Trash2, Flag, Link2
+  Trash2, Flag, Link2, Eye, BookImage, MapPin, Calendar, Clock,
+  CheckCircle2, Users
 } from 'lucide-react'
 import toast from 'react-hot-toast'
 import OwnerBadge from './OwnerBadge'
+
+function useCountdown(to) {
+  const [diff, setDiff] = useState(null)
+  useEffect(() => {
+    if (!to) return
+    const target = to?.toDate ? to.toDate().getTime() : new Date(to).getTime()
+    function tick() {
+      const rem = target - Date.now()
+      setDiff(rem)
+    }
+    tick()
+    const id = setInterval(tick, 1000)
+    return () => clearInterval(id)
+  }, [to])
+  return diff
+}
+
+function CountdownDisplay({ to, label }) {
+  const diff = useCountdown(to)
+  const [tick, setTick] = useState(false)
+
+  useEffect(() => {
+    setTick(true)
+    const t = setTimeout(() => setTick(false), 200)
+    return () => clearTimeout(t)
+  }, [diff])
+
+  if (diff === null) return null
+
+  if (diff <= 0) {
+    return (
+      <div className="mt-3 rounded-xl border border-slate-700 p-4 bg-[#1e293b] text-center">
+        <p className="text-slate-400 text-xs mb-1">{label || 'Countdown'}</p>
+        <p className="text-green-400 font-bold text-lg">Time's up! 🎉</p>
+      </div>
+    )
+  }
+
+  const d = Math.floor(diff / 86400000)
+  const h = Math.floor((diff % 86400000) / 3600000)
+  const m = Math.floor((diff % 3600000) / 60000)
+  const s = Math.floor((diff % 60000) / 1000)
+
+  return (
+    <div className="mt-3 rounded-xl border border-slate-700 p-4 bg-[#1e293b]">
+      <p className="text-slate-400 text-xs text-center mb-3">{label || 'Countdown'}</p>
+      <div className="flex justify-center gap-3">
+        {[['d', d], ['h', h], ['m', m], ['s', s]].map(([unit, val]) => (
+          <div key={unit} className="text-center">
+            <div className={`text-2xl font-bold text-white font-mono min-w-[2.5rem] ${unit === 's' && tick ? 'animate-tick' : ''}`}>
+              {String(val).padStart(2, '0')}
+            </div>
+            <div className="text-[10px] text-slate-500 uppercase">{unit}</div>
+          </div>
+        ))}
+      </div>
+    </div>
+  )
+}
 
 export default function PostCard({ post, onDelete }) {
   const { user, profile } = useAuth()
@@ -23,11 +83,24 @@ export default function PostCard({ post, onDelete }) {
   const [reposted, setReposted] = useState(post.reposts?.includes(user?.uid))
   const [repostCount, setRepostCount] = useState(post.reposts?.length ?? 0)
   const [bookmarked, setBookmarked] = useState(post.bookmarks?.includes(user?.uid))
+  const [views, setViews] = useState(post.views ?? 0)
+  const [rsvped, setRsvped] = useState(post.rsvps?.includes(user?.uid))
+  const [rsvpCount, setRsvpCount] = useState(post.rsvps?.length ?? 0)
   const heartRef = useRef(null)
 
   const timeAgo = post.createdAt?.toDate
     ? formatDistanceToNow(post.createdAt.toDate(), { addSuffix: true })
     : 'just now'
+
+  // Track view once per session
+  useEffect(() => {
+    if (!post.id || !user) return
+    const key = `viewed_${post.id}`
+    if (sessionStorage.getItem(key)) return
+    sessionStorage.setItem(key, '1')
+    updateDoc(doc(db, 'posts', post.id), { views: increment(1) }).catch(() => {})
+    setViews(v => v + 1)
+  }, [post.id, user])
 
   async function toggleLike(e) {
     e.stopPropagation()
@@ -81,6 +154,44 @@ export default function PostCard({ post, onDelete }) {
     setBookmarked(!bookmarked)
   }
 
+  async function toggleRsvp(e) {
+    e.stopPropagation()
+    if (!user) return toast.error('Sign in to RSVP')
+    const ref = doc(db, 'posts', post.id)
+    if (rsvped) {
+      await updateDoc(ref, { rsvps: arrayRemove(user.uid) })
+      setRsvpCount(c => c - 1)
+    } else {
+      await updateDoc(ref, { rsvps: arrayUnion(user.uid) })
+      setRsvpCount(c => c + 1)
+    }
+    setRsvped(!rsvped)
+  }
+
+  async function shareToStory(e) {
+    e.stopPropagation()
+    if (!user) return
+    try {
+      await addDoc(collection(db, 'stories'), {
+        authorId: user.uid,
+        authorName: profile?.displayName,
+        authorUsername: profile?.username,
+        authorAvatar: profile?.avatar || '',
+        mediaUrl: post.mediaUrl || post.imageUrl || null,
+        mediaUrls: post.mediaUrls || null,
+        mediaType: post.mediaType || (post.mediaUrl ? 'image' : null),
+        text: post.content,
+        sharedPostId: post.id,
+        sharedFromUser: post.authorName,
+        createdAt: serverTimestamp(),
+      })
+      toast.success('Shared to your story!')
+    } catch (err) {
+      toast.error(err.message)
+    }
+    setShowMenu(false)
+  }
+
   async function deletePost(e) {
     e.stopPropagation()
     if (!confirm('Delete this post?')) return
@@ -92,7 +203,7 @@ export default function PostCard({ post, onDelete }) {
 
   function copyLink(e) {
     e.stopPropagation()
-    navigator.clipboard.writeText(`${window.location.origin}/post/${post.id}`)
+    navigator.clipboard.writeText(`${window.location.origin}/SOCIAL/post/${post.id}`)
     toast.success('Link copied!')
     setShowMenu(false)
   }
@@ -101,6 +212,8 @@ export default function PostCard({ post, onDelete }) {
     if (e.target.closest('a, button')) return
     navigate(`/post/${post.id}`)
   }
+
+  const canDelete = user?.uid === post.authorId || profile?.role === 'owner'
 
   return (
     <article
@@ -111,6 +224,13 @@ export default function PostCard({ post, onDelete }) {
       {post.isRepost && (
         <div className="flex items-center gap-1.5 text-xs text-slate-500 mb-2 ml-10">
           <Repeat2 size={14} /><span>{post.repostedByName} reposted</span>
+        </div>
+      )}
+
+      {/* Close friends badge */}
+      {post.closeFriendsOnly && (
+        <div className="flex items-center gap-1 text-[11px] text-green-400 mb-2 ml-10">
+          <Users size={11} /> Close Friends only
         </div>
       )}
 
@@ -135,9 +255,32 @@ export default function PostCard({ post, onDelete }) {
               {post.authorName}
             </Link>
             {post.authorRole === 'owner' && <OwnerBadge />}
+
+            {/* Co-author */}
+            {post.coAuthorUsername && (
+              <>
+                <span className="text-slate-500 text-xs">+</span>
+                <Link
+                  to={`/profile/${post.coAuthorUsername}`}
+                  onClick={e => e.stopPropagation()}
+                  className="font-semibold text-white text-sm hover:text-sky-400 transition flex items-center gap-1"
+                >
+                  <img
+                    src={post.coAuthorAvatar || `https://api.dicebear.com/9.x/thumbs/svg?seed=${post.coAuthorUsername}`}
+                    alt=""
+                    className="w-4 h-4 rounded-full object-cover"
+                  />
+                  {post.coAuthorName}
+                </Link>
+              </>
+            )}
+
             <span className="text-slate-500 text-sm">@{post.authorUsername}</span>
             <span className="text-slate-600 text-sm">·</span>
             <span className="text-slate-500 text-xs">{timeAgo}</span>
+            {post.postType === 'scheduled' && (
+              <span className="text-xs text-amber-400 flex items-center gap-0.5"><Clock size={10} /> Scheduled</span>
+            )}
 
             {/* More menu */}
             <div className="ml-auto relative" onClick={e => e.stopPropagation()}>
@@ -150,7 +293,10 @@ export default function PostCard({ post, onDelete }) {
               {showMenu && (
                 <div className="absolute right-0 top-8 bg-[#1e293b] border border-slate-700 rounded-xl shadow-xl z-20 min-w-[160px] py-1">
                   <MenuItem icon={<Link2 size={14} />} label="Copy link" onClick={copyLink} />
-                  {(user?.uid === post.authorId || profile?.role === 'owner')
+                  {profile?.role !== 'fan' && (
+                    <MenuItem icon={<BookImage size={14} />} label="Share to story" onClick={shareToStory} />
+                  )}
+                  {canDelete
                     ? <MenuItem icon={<Trash2 size={14} />} label="Delete" onClick={deletePost} className="text-red-400" />
                     : <MenuItem icon={<Flag size={14} />} label="Report" onClick={() => { toast('Reported'); setShowMenu(false) }} />
                   }
@@ -161,6 +307,46 @@ export default function PostCard({ post, onDelete }) {
 
           {/* Content */}
           <p className="mt-1.5 text-sm text-slate-200 whitespace-pre-wrap leading-relaxed">{post.content}</p>
+
+          {/* Event card */}
+          {post.postType === 'event' && post.eventTitle && (
+            <div className="mt-3 rounded-xl border border-sky-500/30 bg-sky-500/5 p-4">
+              <p className="text-sm font-bold text-white mb-2">{post.eventTitle}</p>
+              <div className="space-y-1.5">
+                {post.eventDate && (
+                  <p className="text-xs text-slate-400 flex items-center gap-2">
+                    <Calendar size={12} className="text-sky-400 shrink-0" />
+                    {format(new Date(post.eventDate), 'PPP p')}
+                  </p>
+                )}
+                {post.eventLocation && (
+                  <p className="text-xs text-slate-400 flex items-center gap-2">
+                    <MapPin size={12} className="text-sky-400 shrink-0" />
+                    {post.eventLocation}
+                  </p>
+                )}
+              </div>
+              {profile?.role !== 'fan' ? (
+                <button
+                  onClick={toggleRsvp}
+                  className={`mt-3 px-4 py-1.5 rounded-full text-xs font-semibold transition flex items-center gap-1.5 ${
+                    rsvped
+                      ? 'bg-green-500/20 text-green-400 border border-green-500/30'
+                      : 'bg-sky-500 hover:bg-sky-400 text-white'
+                  }`}
+                >
+                  {rsvped ? <><CheckCircle2 size={13} /> Going ({rsvpCount})</> : <>RSVP · {rsvpCount} going</>}
+                </button>
+              ) : rsvpCount > 0 && (
+                <p className="mt-2 text-xs text-slate-500">{rsvpCount} going</p>
+              )}
+            </div>
+          )}
+
+          {/* Countdown card */}
+          {post.postType === 'countdown' && post.countdownTo && (
+            <CountdownDisplay to={post.countdownTo} label={post.countdownLabel} />
+          )}
 
           {/* Media */}
           {post.mediaUrls?.length > 0 ? (
@@ -239,6 +425,11 @@ export default function PostCard({ post, onDelete }) {
             >
               <Share2 size={17} />
             </button>
+            {views > 0 && profile?.role !== 'fan' && (
+              <span className="flex items-center gap-1 text-xs text-slate-600 ml-auto">
+                <Eye size={13} />{views}
+              </span>
+            )}
           </div>
         </div>
       </div>
@@ -267,7 +458,7 @@ function ActionBtn({ icon, count, onClick, active, activeColor, label, ref }) {
         active ? activeColor : 'text-slate-500'
       }`}
     >
-      <span className={`p-1.5 rounded-full transition group-hover:bg-slate-700`}>{icon}</span>
+      <span className="p-1.5 rounded-full transition group-hover:bg-slate-700">{icon}</span>
       <span>{count > 0 ? count : ''}</span>
     </button>
   )

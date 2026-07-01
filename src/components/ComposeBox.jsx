@@ -1,9 +1,12 @@
 import { useState, useRef, useEffect } from 'react'
-import { addDoc, collection, serverTimestamp, doc, updateDoc, increment } from 'firebase/firestore'
+import { addDoc, collection, serverTimestamp, doc, updateDoc, increment, getDocs, query, where, limit } from 'firebase/firestore'
 import { db } from '../firebase'
 import { uploadMedia } from '../lib/cloudinary'
 import { useAuth } from '../context/AuthContext'
-import { Image, Video, X, Tag, Loader2, Music, Play, Pause } from 'lucide-react'
+import {
+  Image, Video, X, Tag, Loader2, Music, Play, Pause,
+  Calendar, Clock, MapPin, Timer, Users, UserPlus, Search
+} from 'lucide-react'
 import toast from 'react-hot-toast'
 
 const MAX_CHARS = 280
@@ -28,7 +31,6 @@ async function trimAudioFile(file, startSec, endSec) {
   for (let c = 0; c < buf.numberOfChannels; c++) {
     out.getChannelData(c).set(buf.getChannelData(c).subarray(s0, s1))
   }
-  // Encode to WAV
   const numCh = out.numberOfChannels
   const pcmLen = len * numCh * 2
   const ab = new ArrayBuffer(44 + pcmLen)
@@ -54,7 +56,7 @@ async function trimAudioFile(file, startSec, endSec) {
 export default function ComposeBox({ onPost, replyTo = null, autoFocus = false }) {
   const { user, profile } = useAuth()
   const [content, setContent] = useState('')
-  const [images, setImages] = useState([]) // [{ file, preview }]
+  const [images, setImages] = useState([])
   const [videoFile, setVideoFile] = useState(null)
   const [videoPreview, setVideoPreview] = useState(null)
   const [audioFile, setAudioFile] = useState(null)
@@ -65,6 +67,23 @@ export default function ComposeBox({ onPost, replyTo = null, autoFocus = false }
   const [tagInput, setTagInput] = useState('')
   const [loading, setLoading] = useState(false)
   const [uploading, setUploading] = useState(false)
+
+  // Extra post types
+  const [postType, setPostType] = useState('normal') // normal | event | countdown | scheduled
+  const [eventTitle, setEventTitle] = useState('')
+  const [eventDate, setEventDate] = useState('')
+  const [eventLocation, setEventLocation] = useState('')
+  const [countdownLabel, setCountdownLabel] = useState('')
+  const [countdownTo, setCountdownTo] = useState('')
+  const [scheduledAt, setScheduledAt] = useState('')
+  const [closeFriendsOnly, setCloseFriendsOnly] = useState(false)
+
+  // Collab
+  const [collabSearch, setCollabSearch] = useState('')
+  const [collabResults, setCollabResults] = useState([])
+  const [coAuthor, setCoAuthor] = useState(null)
+  const [showCollabSearch, setShowCollabSearch] = useState(false)
+
   const imageRef = useRef(null)
   const videoRef = useRef(null)
   const audioRef = useRef(null)
@@ -86,9 +105,7 @@ export default function ComposeBox({ onPost, replyTo = null, autoFocus = false }
     e.target.value = ''
   }
 
-  function removeImage(i) {
-    setImages(prev => prev.filter((_, idx) => idx !== i))
-  }
+  function removeImage(i) { setImages(prev => prev.filter((_, idx) => idx !== i)) }
 
   function pickVideo(e) {
     const file = e.target.files[0]
@@ -138,6 +155,18 @@ export default function ComposeBox({ onPost, replyTo = null, autoFocus = false }
     if (videoRef.current) videoRef.current.value = ''
   }
 
+  async function searchCollab(q) {
+    setCollabSearch(q)
+    if (q.length < 2) { setCollabResults([]); return }
+    const snap = await getDocs(query(
+      collection(db, 'users'),
+      where('username', '>=', q.toLowerCase()),
+      where('username', '<=', q.toLowerCase() + '￿'),
+      limit(5)
+    ))
+    setCollabResults(snap.docs.map(d => ({ id: d.id, ...d.data() })).filter(u => u.id !== user.uid))
+  }
+
   function parseTags(text) {
     const inline = [...text.matchAll(/#(\w+)/g)].map(m => m[1].toLowerCase())
     const extra = tagInput.split(',').map(t => t.trim().toLowerCase()).filter(Boolean)
@@ -152,12 +181,10 @@ export default function ComposeBox({ onPost, replyTo = null, autoFocus = false }
     setUploading(true)
 
     try {
-      // Upload images
       const mediaUrls = images.length > 0
         ? await Promise.all(images.map(img => uploadMedia(img.file).then(r => r.url)))
         : []
 
-      // Upload video
       let mediaUrl = null
       let mediaType = null
       if (videoFile) {
@@ -169,7 +196,6 @@ export default function ComposeBox({ onPost, replyTo = null, autoFocus = false }
         mediaType = 'image'
       }
 
-      // Upload audio (trimmed if needed)
       let audioUrl = null
       if (audioFile) {
         const isFullClip = trimStart === 0 && Math.abs(trimEnd - audioDuration) < 0.5
@@ -179,6 +205,12 @@ export default function ComposeBox({ onPost, replyTo = null, autoFocus = false }
       }
 
       setUploading(false)
+
+      // Close-friends visibility
+      let visibleTo = null
+      if (closeFriendsOnly && !replyTo) {
+        visibleTo = [user.uid, ...(profile?.closeFriends ?? [])]
+      }
 
       const data = {
         content: content.trim(),
@@ -196,8 +228,36 @@ export default function ComposeBox({ onPost, replyTo = null, autoFocus = false }
         likes: [],
         reposts: [],
         bookmarks: [],
+        rsvps: [],
+        views: 0,
         commentCount: 0,
+        closeFriendsOnly: closeFriendsOnly && !replyTo,
+        ...(visibleTo ? { visibleTo } : {}),
         createdAt: serverTimestamp(),
+      }
+
+      // Post type extras
+      if (postType === 'event' && eventTitle) {
+        data.postType = 'event'
+        data.eventTitle = eventTitle
+        data.eventDate = eventDate || null
+        data.eventLocation = eventLocation || null
+      } else if (postType === 'countdown' && countdownTo) {
+        data.postType = 'countdown'
+        data.countdownTo = new Date(countdownTo).toISOString()
+        data.countdownLabel = countdownLabel || 'Countdown'
+      } else if (postType === 'scheduled' && scheduledAt) {
+        data.postType = 'scheduled'
+        data.publishAt = new Date(scheduledAt).toISOString()
+      }
+
+      // Collab author
+      if (coAuthor && !replyTo) {
+        data.coAuthorId = coAuthor.id
+        data.coAuthorName = coAuthor.displayName
+        data.coAuthorUsername = coAuthor.username
+        data.coAuthorAvatar = coAuthor.avatar || ''
+        data.coAuthorRole = coAuthor.role || 'member'
       }
 
       if (replyTo) {
@@ -209,11 +269,10 @@ export default function ComposeBox({ onPost, replyTo = null, autoFocus = false }
         await addDoc(collection(db, 'posts'), data)
       }
 
-      setContent('')
-      setImages([])
-      clearVideo()
-      setAudioFile(null)
-      setTagInput('')
+      setContent(''); setImages([]); clearVideo(); setAudioFile(null); setTagInput('')
+      setPostType('normal'); setEventTitle(''); setEventDate(''); setEventLocation('')
+      setCountdownLabel(''); setCountdownTo(''); setScheduledAt('')
+      setCoAuthor(null); setShowCollabSearch(false); setCloseFriendsOnly(false)
       onPost?.()
       toast.success(replyTo ? 'Reply posted!' : 'Posted!')
     } catch (err) {
@@ -238,6 +297,7 @@ export default function ComposeBox({ onPost, replyTo = null, autoFocus = false }
             Replying to <span className="text-sky-400">@{replyTo.authorUsername}</span>
           </p>
         )}
+
         <textarea
           value={content}
           onChange={e => setContent(e.target.value)}
@@ -248,17 +308,13 @@ export default function ComposeBox({ onPost, replyTo = null, autoFocus = false }
           maxLength={MAX_CHARS + 50}
         />
 
-        {/* Image grid preview */}
+        {/* Image grid */}
         {images.length > 0 && (
           <div className={`mt-2 grid gap-1 rounded-xl overflow-hidden ${images.length > 1 ? 'grid-cols-2' : 'grid-cols-1'}`}>
             {images.map((img, i) => (
               <div key={i} className="relative">
                 <img src={img.preview} alt="" className="w-full object-cover max-h-48 rounded-lg" />
-                <button
-                  type="button"
-                  onClick={() => removeImage(i)}
-                  className="absolute top-1.5 right-1.5 bg-black/70 rounded-full p-1 text-white hover:bg-black"
-                >
+                <button type="button" onClick={() => removeImage(i)} className="absolute top-1.5 right-1.5 bg-black/70 rounded-full p-1 text-white hover:bg-black">
                   <X size={13} />
                 </button>
               </div>
@@ -294,26 +350,101 @@ export default function ComposeBox({ onPost, replyTo = null, autoFocus = false }
               <div className="space-y-1.5">
                 <div className="flex items-center gap-2">
                   <span className="text-[10px] text-slate-500 w-10">Start</span>
-                  <input
-                    type="range" min={0} max={audioDuration} step={0.1}
-                    value={trimStart}
+                  <input type="range" min={0} max={audioDuration} step={0.1} value={trimStart}
                     onChange={e => setTrimStart(Math.min(+e.target.value, trimEnd - 0.5))}
-                    className="flex-1 accent-sky-500 h-1"
-                  />
+                    className="flex-1 accent-sky-500 h-1" />
                   <span className="text-[10px] text-slate-400 w-10 text-right">{formatTime(trimStart)}</span>
                 </div>
                 <div className="flex items-center gap-2">
                   <span className="text-[10px] text-slate-500 w-10">End</span>
-                  <input
-                    type="range" min={0} max={audioDuration} step={0.1}
-                    value={trimEnd}
+                  <input type="range" min={0} max={audioDuration} step={0.1} value={trimEnd}
                     onChange={e => setTrimEnd(Math.max(+e.target.value, trimStart + 0.5))}
-                    className="flex-1 accent-sky-500 h-1"
-                  />
+                    className="flex-1 accent-sky-500 h-1" />
                   <span className="text-[10px] text-slate-400 w-10 text-right">{formatTime(trimEnd)}</span>
                 </div>
                 <p className="text-[10px] text-slate-500 text-right">Clip: {formatTime(trimEnd - trimStart)}</p>
               </div>
+            )}
+          </div>
+        )}
+
+        {/* Post type extras */}
+        {postType === 'event' && (
+          <div className="mt-2 bg-slate-800 rounded-xl p-3 space-y-2">
+            <div className="flex items-center gap-2 mb-1">
+              <Calendar size={13} className="text-sky-400" />
+              <span className="text-xs font-semibold text-slate-300">Event Details</span>
+              <button type="button" onClick={() => setPostType('normal')} className="ml-auto text-slate-500 hover:text-white"><X size={13} /></button>
+            </div>
+            <input value={eventTitle} onChange={e => setEventTitle(e.target.value)} placeholder="Event title *" className="w-full bg-slate-700 rounded-lg px-3 py-1.5 text-sm text-white placeholder-slate-500 focus:outline-none focus:ring-1 focus:ring-sky-500" />
+            <input type="datetime-local" value={eventDate} onChange={e => setEventDate(e.target.value)} className="w-full bg-slate-700 rounded-lg px-3 py-1.5 text-sm text-white focus:outline-none focus:ring-1 focus:ring-sky-500" />
+            <input value={eventLocation} onChange={e => setEventLocation(e.target.value)} placeholder="Location (optional)" className="w-full bg-slate-700 rounded-lg px-3 py-1.5 text-sm text-white placeholder-slate-500 focus:outline-none focus:ring-1 focus:ring-sky-500" />
+          </div>
+        )}
+
+        {postType === 'countdown' && (
+          <div className="mt-2 bg-slate-800 rounded-xl p-3 space-y-2">
+            <div className="flex items-center gap-2 mb-1">
+              <Timer size={13} className="text-sky-400" />
+              <span className="text-xs font-semibold text-slate-300">Countdown</span>
+              <button type="button" onClick={() => setPostType('normal')} className="ml-auto text-slate-500 hover:text-white"><X size={13} /></button>
+            </div>
+            <input value={countdownLabel} onChange={e => setCountdownLabel(e.target.value)} placeholder="Label (e.g. Album drops in…)" className="w-full bg-slate-700 rounded-lg px-3 py-1.5 text-sm text-white placeholder-slate-500 focus:outline-none focus:ring-1 focus:ring-sky-500" />
+            <input type="datetime-local" value={countdownTo} onChange={e => setCountdownTo(e.target.value)} className="w-full bg-slate-700 rounded-lg px-3 py-1.5 text-sm text-white focus:outline-none focus:ring-1 focus:ring-sky-500" />
+          </div>
+        )}
+
+        {postType === 'scheduled' && (
+          <div className="mt-2 bg-slate-800 rounded-xl p-3 space-y-2">
+            <div className="flex items-center gap-2 mb-1">
+              <Clock size={13} className="text-sky-400" />
+              <span className="text-xs font-semibold text-slate-300">Schedule Post</span>
+              <button type="button" onClick={() => setPostType('normal')} className="ml-auto text-slate-500 hover:text-white"><X size={13} /></button>
+            </div>
+            <input type="datetime-local" value={scheduledAt} onChange={e => setScheduledAt(e.target.value)} min={new Date().toISOString().slice(0,16)} className="w-full bg-slate-700 rounded-lg px-3 py-1.5 text-sm text-white focus:outline-none focus:ring-1 focus:ring-sky-500" />
+          </div>
+        )}
+
+        {/* Collab search */}
+        {showCollabSearch && (
+          <div className="mt-2 bg-slate-800 rounded-xl p-3 space-y-2">
+            <div className="flex items-center gap-2 mb-1">
+              <UserPlus size={13} className="text-sky-400" />
+              <span className="text-xs font-semibold text-slate-300">Collab with</span>
+              <button type="button" onClick={() => { setShowCollabSearch(false); setCoAuthor(null) }} className="ml-auto text-slate-500 hover:text-white"><X size={13} /></button>
+            </div>
+            {coAuthor ? (
+              <div className="flex items-center gap-2 p-2 bg-sky-500/10 rounded-lg">
+                <img src={coAuthor.avatar || `https://api.dicebear.com/9.x/thumbs/svg?seed=${coAuthor.username}`} alt="" className="w-7 h-7 rounded-full object-cover" />
+                <span className="text-sm text-white">{coAuthor.displayName}</span>
+                <button type="button" onClick={() => setCoAuthor(null)} className="ml-auto text-slate-500 hover:text-white"><X size={12} /></button>
+              </div>
+            ) : (
+              <>
+                <div className="relative">
+                  <Search size={13} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-500" />
+                  <input
+                    value={collabSearch}
+                    onChange={e => searchCollab(e.target.value)}
+                    placeholder="Search username…"
+                    className="w-full bg-slate-700 rounded-lg pl-8 pr-3 py-1.5 text-sm text-white placeholder-slate-500 focus:outline-none focus:ring-1 focus:ring-sky-500"
+                  />
+                </div>
+                {collabResults.length > 0 && (
+                  <div className="space-y-1">
+                    {collabResults.map(u => (
+                      <button key={u.id} type="button" onClick={() => { setCoAuthor(u); setCollabResults([]) }}
+                        className="flex items-center gap-2 w-full p-2 rounded-lg hover:bg-slate-700 transition text-left">
+                        <img src={u.avatar || `https://api.dicebear.com/9.x/thumbs/svg?seed=${u.username}`} alt="" className="w-7 h-7 rounded-full object-cover" />
+                        <div>
+                          <p className="text-sm text-white">{u.displayName}</p>
+                          <p className="text-xs text-slate-500">@{u.username}</p>
+                        </div>
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </>
             )}
           </div>
         )}
@@ -329,19 +460,40 @@ export default function ComposeBox({ onPost, replyTo = null, autoFocus = false }
           />
         </div>
 
+        {/* Close friends toggle (only for original posts, not replies, not fans) */}
+        {!replyTo && profile?.role !== 'fan' && profile?.closeFriends?.length > 0 && (
+          <button
+            type="button"
+            onClick={() => setCloseFriendsOnly(v => !v)}
+            className={`mt-2 flex items-center gap-1.5 text-xs px-3 py-1 rounded-full transition ${closeFriendsOnly ? 'bg-green-500/20 text-green-400 border border-green-500/30' : 'text-slate-500 hover:text-green-400'}`}
+          >
+            <Users size={11} /> {closeFriendsOnly ? 'Close Friends only ✓' : 'Close Friends only'}
+          </button>
+        )}
+
         <div className="flex items-center justify-between mt-3">
-          <div className="flex items-center gap-1">
+          <div className="flex items-center gap-1 flex-wrap">
             <input type="file" ref={imageRef} accept="image/*" multiple onChange={pickImages} className="hidden" />
             <input type="file" ref={videoRef} accept="video/*" onChange={pickVideo} className="hidden" />
             <input type="file" ref={audioRef} accept="audio/*" onChange={pickAudio} className="hidden" />
-            {/* Fans can only add images to posts, no media to comments */}
+
             {!(profile?.role === 'fan' && replyTo) && (
-              <ToolBtn icon={<Image size={18} />} onClick={() => imageRef.current.click()} label="Photos" disabled={!!videoFile || images.length >= MAX_IMAGES || !!replyTo && profile?.role === 'fan'} />
+              <ToolBtn icon={<Image size={18} />} onClick={() => imageRef.current.click()} label="Photos" disabled={!!videoFile || images.length >= MAX_IMAGES} />
             )}
             {profile?.role !== 'fan' && (
               <>
                 <ToolBtn icon={<Video size={18} />} onClick={() => videoRef.current.click()} label="Video" disabled={images.length > 0 || !!videoFile} />
                 <ToolBtn icon={<Music size={18} />} onClick={() => audioRef.current.click()} label="Audio" disabled={!!audioFile} />
+              </>
+            )}
+
+            {/* Extra post type buttons (only on non-reply posts for non-fans) */}
+            {!replyTo && profile?.role !== 'fan' && (
+              <>
+                <ToolBtn icon={<Calendar size={18} />} onClick={() => setPostType(t => t === 'event' ? 'normal' : 'event')} label="Event" active={postType === 'event'} />
+                <ToolBtn icon={<Timer size={18} />} onClick={() => setPostType(t => t === 'countdown' ? 'normal' : 'countdown')} label="Countdown" active={postType === 'countdown'} />
+                <ToolBtn icon={<Clock size={18} />} onClick={() => setPostType(t => t === 'scheduled' ? 'normal' : 'scheduled')} label="Schedule" active={postType === 'scheduled'} />
+                <ToolBtn icon={<UserPlus size={18} />} onClick={() => setShowCollabSearch(v => !v)} label="Collab" active={showCollabSearch} />
               </>
             )}
           </div>
@@ -360,7 +512,7 @@ export default function ComposeBox({ onPost, replyTo = null, autoFocus = false }
               disabled={loading || !canPost || remaining < 0}
               className="px-5 py-2 bg-sky-500 hover:bg-sky-400 text-white rounded-full text-sm font-semibold transition disabled:opacity-40 shadow shadow-sky-500/30"
             >
-              {loading ? '…' : replyTo ? 'Reply' : 'Post'}
+              {loading ? '…' : replyTo ? 'Reply' : postType === 'scheduled' ? 'Schedule' : 'Post'}
             </button>
           </div>
         </div>
@@ -369,14 +521,14 @@ export default function ComposeBox({ onPost, replyTo = null, autoFocus = false }
   )
 }
 
-function ToolBtn({ icon, onClick, label, disabled }) {
+function ToolBtn({ icon, onClick, label, disabled, active }) {
   return (
     <button
       type="button"
       onClick={onClick}
       aria-label={label}
       disabled={disabled}
-      className="p-2 rounded-full text-sky-400 hover:bg-sky-400/10 transition disabled:opacity-30 disabled:cursor-not-allowed"
+      className={`p-2 rounded-full transition disabled:opacity-30 disabled:cursor-not-allowed ${active ? 'text-sky-400 bg-sky-400/10' : 'text-sky-400 hover:bg-sky-400/10'}`}
     >
       {icon}
     </button>

@@ -1,6 +1,6 @@
 import { createContext, useContext, useEffect, useState } from 'react'
 import { onAuthStateChanged } from 'firebase/auth'
-import { doc, getDoc, setDoc, serverTimestamp } from 'firebase/firestore'
+import { doc, getDoc, setDoc, updateDoc, serverTimestamp } from 'firebase/firestore'
 import { auth, db } from '../firebase'
 
 const AuthContext = createContext(null)
@@ -20,8 +20,8 @@ export function AuthProvider({ children }) {
 
           if (snap.exists()) {
             setProfile({ id: snap.id, ...snap.data() })
+            updateDoc(ref, { lastSeen: serverTimestamp() }).catch(() => {})
           } else {
-            // User doc missing (rules were off during signup) — create it now
             const username = firebaseUser.email
               ?.split('@')[0]
               ?.toLowerCase()
@@ -37,7 +37,9 @@ export function AuthProvider({ children }) {
               role: 'member',
               followers: [],
               following: [],
+              closeFriends: [],
               postCount: 0,
+              lastSeen: serverTimestamp(),
               createdAt: serverTimestamp(),
             }
             await setDoc(ref, defaultProfile)
@@ -45,7 +47,6 @@ export function AuthProvider({ children }) {
           }
         } catch (err) {
           console.error('Profile load error:', err.message)
-          // Fallback so app doesn't break — Firestore rules might still be unpublished
           const username = firebaseUser.email?.split('@')[0]?.toLowerCase() || 'user'
           setProfile({
             id: firebaseUser.uid,
@@ -64,6 +65,16 @@ export function AuthProvider({ children }) {
       setLoading(false)
     })
   }, [])
+
+  // Keep lastSeen fresh
+  useEffect(() => {
+    if (!user) return
+    const ref = doc(db, 'users', user.uid)
+    const interval = setInterval(() => {
+      updateDoc(ref, { lastSeen: serverTimestamp() }).catch(() => {})
+    }, 60_000)
+    return () => clearInterval(interval)
+  }, [user])
 
   return (
     <AuthContext.Provider value={{ user, profile, setProfile, loading }}>

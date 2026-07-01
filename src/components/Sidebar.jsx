@@ -3,9 +3,10 @@ import { signOut } from 'firebase/auth'
 import { auth } from '../firebase'
 import { useAuth } from '../context/AuthContext'
 import { useNotifCount } from '../hooks/useNotifCount'
+import ThemePicker from './ThemePicker'
 import {
   Anchor, Home, Search, Bell, User, PlusSquare, MessageCircle,
-  Compass, LogOut, Bookmark, TrendingUp, Crown, Radio
+  Compass, LogOut, Bookmark, TrendingUp, Crown, Radio, Shield, Users
 } from 'lucide-react'
 import toast from 'react-hot-toast'
 
@@ -16,15 +17,17 @@ export default function Sidebar() {
   const unread = useNotifCount()
 
   const isFan = profile?.role === 'fan'
+  const isOwner = profile?.role === 'owner'
 
   const links = [
-    { to: '/',             icon: <Home size={22} />,        label: 'Home' },
-    { to: '/explore',      icon: <Compass size={22} />,     label: 'Explore' },
-    { to: '/trending',     icon: <TrendingUp size={22} />,  label: 'Trending' },
-    { to: '/notifications',icon: <Bell size={22} />,        label: 'Notifications', badge: unread },
+    { to: '/',               icon: <Home size={22} />,        label: 'Home' },
+    { to: '/explore',        icon: <Compass size={22} />,     label: 'Explore' },
+    { to: '/trending',       icon: <TrendingUp size={22} />,  label: 'Trending' },
+    { to: '/notifications',  icon: <Bell size={22} />,        label: 'Notifications', badge: unread },
     ...(!isFan ? [{ to: '/messages', icon: <MessageCircle size={22} />, label: 'Messages' }] : []),
-    { to: '/bookmarks',    icon: <Bookmark size={22} />,    label: 'Bookmarks' },
+    { to: '/bookmarks',      icon: <Bookmark size={22} />,    label: 'Bookmarks' },
     { to: `/profile/${profile?.username}`, icon: <User size={22} />, label: 'Profile' },
+    ...(isOwner ? [{ to: '/admin', icon: <Shield size={22} />, label: 'Admin' }] : []),
   ]
 
   async function logout() {
@@ -80,8 +83,8 @@ export default function Sidebar() {
           New Post
         </Link>
 
-        {/* Go Live button — hidden for fans */}
-        {profile?.role !== 'fan' && (
+        {/* Go Live — hidden for fans */}
+        {!isFan && (
           <Link
             to="/live"
             className="mt-2 flex items-center justify-center gap-2 w-full py-3 bg-red-500 hover:bg-red-400 text-white rounded-xl font-semibold text-sm transition shadow shadow-red-500/30"
@@ -90,12 +93,31 @@ export default function Sidebar() {
             Go Live
           </Link>
         )}
+
+        {/* Watch Party — hidden for fans */}
+        {!isFan && (
+          <Link
+            to="/watch-party"
+            className="mt-2 flex items-center justify-center gap-2 w-full py-2.5 border border-slate-700 text-slate-400 hover:text-white hover:bg-slate-800 rounded-xl text-sm transition"
+          >
+            <Users size={16} />
+            Watch Party
+          </Link>
+        )}
+
+        {/* Theme picker */}
+        <div className="mt-2">
+          <ThemePicker />
+        </div>
       </div>
 
       {/* Profile footer */}
       {profile && (
         <div className="flex items-center gap-3 px-2 py-3 rounded-xl hover:bg-slate-800 cursor-pointer group">
-          <img src={profile.avatar} alt="" className="w-9 h-9 rounded-full object-cover" />
+          <div className="relative">
+            <img src={profile.avatar} alt="" className="w-9 h-9 rounded-full object-cover" />
+            <div className="absolute bottom-0 right-0 w-3 h-3 bg-green-400 rounded-full border-2 border-[#0f172a]" />
+          </div>
           <div className="flex-1 min-w-0">
             <div className="flex items-center gap-1.5">
               <p className="text-sm font-semibold text-white truncate">{profile.displayName}</p>

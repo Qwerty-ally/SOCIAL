@@ -2,74 +2,94 @@ rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
 
+    function isAuth() {
+      return request.auth != null;
+    }
+
+    function isOwner() {
+      return isAuth() && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'owner';
+    }
+
+    function canDelete() {
+      return isAuth() && (request.auth.uid == resource.data.authorId || isOwner());
+    }
+
     match /users/{userId} {
-      allow read: if request.auth != null;
+      allow read: if isAuth();
       allow create: if request.auth.uid == userId;
-      allow update: if request.auth.uid == userId ||
-        (request.auth != null &&
-         request.resource.data.diff(resource.data).affectedKeys().hasOnly(['followers'])) ||
-        (request.auth != null &&
-         get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'owner');
+      allow update: if isAuth();
+      allow delete: if isOwner();
     }
 
     match /posts/{postId} {
-      allow read: if request.auth != null;
-      allow create: if request.auth != null;
-      allow update: if request.auth != null;
-      allow delete: if request.auth.uid == resource.data.authorId ||
-        (request.auth != null &&
-         get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'owner');
+      allow read: if isAuth();
+      allow create: if isAuth();
+      allow update: if isAuth();
+      allow delete: if canDelete();
 
       match /comments/{commentId} {
-        allow read: if request.auth != null;
-        allow create: if request.auth != null;
-        allow update: if request.auth != null;
-        allow delete: if request.auth.uid == resource.data.authorId;
+        allow read: if isAuth();
+        allow create: if isAuth();
+        allow update: if isAuth();
+        allow delete: if canDelete();
       }
     }
 
     match /notifications/{notifId} {
       allow read: if request.auth.uid == resource.data.to;
-      allow create: if request.auth != null;
+      allow create: if isAuth();
       allow update: if request.auth.uid == resource.data.to;
       allow delete: if request.auth.uid == resource.data.to;
     }
 
     match /streams/{streamId} {
-      allow read: if request.auth != null;
-      allow create: if request.auth != null;
-      allow update: if request.auth != null;
+      allow read: if isAuth();
+      allow create: if isAuth();
+      allow update: if isAuth();
       allow delete: if request.auth.uid == resource.data.hostId;
 
       match /viewers/{viewerId} {
-        allow read, write: if request.auth != null;
+        allow read, write: if isAuth();
 
         match /hostCandidates/{id} {
-          allow read, write: if request.auth != null;
+          allow read, write: if isAuth();
         }
         match /viewerCandidates/{id} {
-          allow read, write: if request.auth != null;
+          allow read, write: if isAuth();
         }
       }
 
       match /chat/{msgId} {
-        allow read: if request.auth != null;
-        allow create: if request.auth != null;
+        allow read: if isAuth();
+        allow create: if isAuth();
       }
     }
 
     match /stories/{storyId} {
-      allow read: if request.auth != null;
-      allow create: if request.auth != null;
+      allow read: if isAuth();
+      allow create: if isAuth();
       allow delete: if request.auth.uid == resource.data.authorId;
     }
 
     match /conversations/{convoId} {
-      allow read, write: if request.auth != null;
+      allow read, write: if isAuth();
 
       match /messages/{msgId} {
-        allow read, write: if request.auth != null;
+        allow read, write: if isAuth();
       }
     }
+
+    match /watchParties/{partyId} {
+      allow read: if isAuth();
+      allow create: if isAuth();
+      allow update: if isAuth();
+      allow delete: if request.auth.uid == resource.data.hostId;
+
+      match /chat/{msgId} {
+        allow read: if isAuth();
+        allow create: if isAuth();
+      }
+    }
+
   }
 }

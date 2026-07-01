@@ -1,5 +1,6 @@
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom'
 import { AuthProvider, useAuth } from './context/AuthContext'
+import { ThemeProvider } from './context/ThemeContext'
 import Sidebar from './components/Sidebar'
 import MobileNav from './components/MobileNav'
 import AuthPage from './pages/AuthPage'
@@ -14,6 +15,8 @@ import TrendingPage from './pages/TrendingPage'
 import ComposePage from './pages/ComposePage'
 import GoLivePage from './pages/GoLivePage'
 import WatchLivePage from './pages/WatchLivePage'
+import WatchPartyPage from './pages/WatchPartyPage'
+import AdminPage from './pages/AdminPage'
 import { Loader2 } from 'lucide-react'
 
 function Layout({ children }) {
@@ -23,7 +26,7 @@ function Layout({ children }) {
       <main className="flex-1 min-w-0 border-x border-slate-700/50 pb-16 md:pb-0">
         {children}
       </main>
-<MobileNav />
+      <MobileNav />
     </div>
   )
 }
@@ -42,6 +45,12 @@ function ProtectedRoute({ children }) {
 function FanGuard({ children }) {
   const { profile } = useAuth()
   if (profile?.role === 'fan') return <Navigate to="/" replace />
+  return children
+}
+
+function OwnerGuard({ children }) {
+  const { profile } = useAuth()
+  if (profile?.role !== 'owner') return <Navigate to="/" replace />
   return children
 }
 
@@ -66,6 +75,9 @@ function AppRoutes() {
       <Route path="/compose" element={<ProtectedRoute><Layout><ComposePage /></Layout></ProtectedRoute>} />
       <Route path="/live" element={<ProtectedRoute><Layout><FanGuard><GoLivePage /></FanGuard></Layout></ProtectedRoute>} />
       <Route path="/watch/:streamId" element={<ProtectedRoute><Layout><WatchLivePage /></Layout></ProtectedRoute>} />
+      <Route path="/watch-party" element={<ProtectedRoute><Layout><FanGuard><WatchPartyPage /></FanGuard></Layout></ProtectedRoute>} />
+      <Route path="/watch-party/:partyId" element={<ProtectedRoute><Layout><FanGuard><WatchPartyPage /></FanGuard></Layout></ProtectedRoute>} />
+      <Route path="/admin" element={<ProtectedRoute><Layout><OwnerGuard><AdminPage /></OwnerGuard></Layout></ProtectedRoute>} />
       <Route path="/post/:id" element={<ProtectedRoute><Layout><PostPage /></Layout></ProtectedRoute>} />
       <Route path="/profile/:username" element={<ProtectedRoute><Layout><ProfilePage /></Layout></ProtectedRoute>} />
       <Route path="*" element={<Navigate to="/" replace />} />
@@ -76,9 +88,11 @@ function AppRoutes() {
 export default function App() {
   return (
     <BrowserRouter basename="/SOCIAL">
-      <AuthProvider>
-        <AppRoutes />
-      </AuthProvider>
+      <ThemeProvider>
+        <AuthProvider>
+          <AppRoutes />
+        </AuthProvider>
+      </ThemeProvider>
     </BrowserRouter>
   )
 }

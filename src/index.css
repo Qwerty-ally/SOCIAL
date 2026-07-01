@@ -1,30 +1,100 @@
 @import "tailwindcss";
 
+/* ── Default CSS variables (midnight theme) ── */
+:root {
+  --bg: #0f172a;
+  --surface: #1e293b;
+  --surface-hover: #243044;
+  --border: #334155;
+  --text: #f8fafc;
+  --text-muted: #94a3b8;
+  --accent: #0ea5e9;
+  --accent-hover: #38bdf8;
+}
+
+/* ── Base ── */
 body {
   margin: 0;
-  background-color: #0f172a;
-  color: #e2e8f0;
+  background-color: var(--bg) !important;
+  color: var(--text) !important;
   font-family: 'Inter', system-ui, sans-serif;
   -webkit-font-smoothing: antialiased;
 }
+#root { min-height: 100vh; }
 
-#root {
-  min-height: 100vh;
-}
-
+/* ── Scrollbar ── */
 .anchor-scrollbar::-webkit-scrollbar { width: 6px; }
-.anchor-scrollbar::-webkit-scrollbar-track { background: #1e293b; }
-.anchor-scrollbar::-webkit-scrollbar-thumb { background: #334155; border-radius: 3px; }
+.anchor-scrollbar::-webkit-scrollbar-track { background: var(--surface); }
+.anchor-scrollbar::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
 
-@keyframes fade-in {
-  from { opacity: 0; transform: translateY(8px); }
-  to   { opacity: 1; transform: translateY(0); }
-}
+/* ── Keyframes ── */
+@keyframes fade-in { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: translateY(0); } }
 .animate-fade-in { animation: fade-in 0.25s ease both; }
-
-@keyframes pulse-heart {
-  0%   { transform: scale(1); }
-  50%  { transform: scale(1.35); }
-  100% { transform: scale(1); }
-}
+@keyframes pulse-heart { 0% { transform: scale(1); } 50% { transform: scale(1.35); } 100% { transform: scale(1); } }
 .animate-heart { animation: pulse-heart 0.3s ease; }
+@keyframes countdown-tick { 0% { transform: scale(1.08); } 100% { transform: scale(1); } }
+.animate-tick { animation: countdown-tick 0.2s ease; }
+
+/* ── Theme overrides for background classes ── */
+.bg-\[\#0f172a\]               { background-color: var(--bg) !important; }
+.bg-\[\#1e293b\]               { background-color: var(--surface) !important; }
+.bg-\[\#243044\]               { background-color: var(--surface-hover) !important; }
+.hover\:bg-\[\#243044\]:hover  { background-color: var(--surface-hover) !important; }
+.bg-\[\#0f172a\]\/90           { background-color: color-mix(in srgb, var(--bg) 90%, transparent) !important; }
+
+/* Slate class overrides */
+.bg-slate-900                  { background-color: var(--bg) !important; }
+.bg-slate-800                  { background-color: var(--surface) !important; }
+.bg-slate-700                  { background-color: var(--border) !important; }
+.hover\:bg-slate-800:hover     { background-color: var(--surface-hover) !important; }
+.hover\:bg-slate-700:hover     { background-color: color-mix(in srgb, var(--border) 80%, transparent) !important; }
+.border-slate-700              { border-color: var(--border) !important; }
+.border-slate-700\/50          { border-color: color-mix(in srgb, var(--border) 50%, transparent) !important; }
+.border-slate-700\/60          { border-color: color-mix(in srgb, var(--border) 60%, transparent) !important; }
+.border-slate-700\/30          { border-color: color-mix(in srgb, var(--border) 30%, transparent) !important; }
+.border-slate-600              { border-color: var(--border) !important; }
+
+/* ── Accent overrides ── */
+.bg-sky-500                    { background-color: var(--accent) !important; }
+.hover\:bg-sky-400:hover       { background-color: var(--accent-hover) !important; }
+.text-sky-400                  { color: var(--accent) !important; }
+.text-sky-500                  { color: var(--accent) !important; }
+.border-sky-500                { border-color: var(--accent) !important; }
+.focus\:border-sky-500:focus   { border-color: var(--accent) !important; }
+.bg-sky-500\/20                { background-color: color-mix(in srgb, var(--accent) 20%, transparent) !important; }
+.accent-sky-500                { accent-color: var(--accent) !important; }
+.shadow-sky-500\/30            { box-shadow: 0 1px 3px color-mix(in srgb, var(--accent) 30%, transparent) !important; }
+.ring-sky-500                  { --tw-ring-color: var(--accent) !important; }
+.hover\:ring-sky-500:hover     { --tw-ring-color: var(--accent) !important; }
+.bg-sky-400\/10                { background-color: color-mix(in srgb, var(--accent) 10%, transparent) !important; }
+.hover\:bg-sky-400\/10:hover   { background-color: color-mix(in srgb, var(--accent) 10%, transparent) !important; }
+.hover\:text-sky-400:hover     { color: var(--accent) !important; }
+.focus\:outline-sky-500:focus  { outline-color: var(--accent) !important; }
+
+/* ── Light-theme text overrides ── */
+[data-theme-type="light"] .text-white     { color: var(--text) !important; }
+[data-theme-type="light"] .text-slate-200 { color: var(--text) !important; }
+[data-theme-type="light"] .text-slate-300 { color: var(--text) !important; }
+[data-theme-type="light"] .text-slate-400 { color: var(--text-muted) !important; }
+[data-theme-type="light"] .text-slate-500 { color: var(--text-muted) !important; }
+[data-theme-type="light"] .text-slate-600 { color: color-mix(in srgb, var(--text-muted) 70%, transparent) !important; }
+[data-theme-type="light"] .placeholder-slate-500::placeholder { color: var(--text-muted) !important; }
+[data-theme-type="light"] .placeholder-slate-600::placeholder { color: color-mix(in srgb, var(--text-muted) 60%, transparent) !important; }
+[data-theme-type="light"] .text-sky-400   { color: var(--accent) !important; }
+
+/* Preserve white text on coloured buttons in light themes */
+[data-theme-type="light"] button.bg-sky-500,
+[data-theme-type="light"] a.bg-sky-500,
+[data-theme-type="light"] button.bg-red-500,
+[data-theme-type="light"] button.bg-amber-500,
+[data-theme-type="light"] button.bg-green-500,
+[data-theme-type="light"] button.bg-purple-500 { color: #ffffff !important; }
+
+/* ── Shorthand utility classes using CSS variables ── */
+.t-bg            { background-color: var(--bg); }
+.t-surface       { background-color: var(--surface); }
+.t-border        { border-color: var(--border); }
+.t-text          { color: var(--text); }
+.t-muted         { color: var(--text-muted); }
+.t-accent        { color: var(--accent); }
+.t-bg-accent     { background-color: var(--accent); }
