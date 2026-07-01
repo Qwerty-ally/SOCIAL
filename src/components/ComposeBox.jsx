@@ -87,6 +87,7 @@ export default function ComposeBox({ onPost, replyTo = null, autoFocus = false }
   // @mention autocomplete
   const [mentionQuery, setMentionQuery] = useState(null)
   const [mentionResults, setMentionResults] = useState([])
+  const [mentionPos, setMentionPos] = useState(null)
   const textareaRef = useRef(null)
 
   useEffect(() => {
@@ -103,6 +104,19 @@ export default function ComposeBox({ onPost, replyTo = null, autoFocus = false }
     }, 150)
     return () => clearTimeout(id)
   }, [mentionQuery])
+
+  // Close mention dropdown on outside click
+  useEffect(() => {
+    if (!mentionResults.length) return
+    function handler(e) {
+      if (!e.target.closest('[data-mention-dropdown]') && !e.target.closest('textarea')) {
+        setMentionResults([])
+        setMentionQuery(null)
+      }
+    }
+    document.addEventListener('mousedown', handler)
+    return () => document.removeEventListener('mousedown', handler)
+  }, [mentionResults.length])
 
   const imageRef = useRef(null)
   const videoRef = useRef(null)
@@ -210,6 +224,8 @@ export default function ComposeBox({ onPost, replyTo = null, autoFocus = false }
     const match = before.match(/@(\w*)$/)
     if (match) {
       setMentionQuery(match[1])
+      const rect = textareaRef.current?.getBoundingClientRect()
+      if (rect) setMentionPos({ top: rect.bottom + 6, left: rect.left, width: rect.width })
     } else {
       setMentionQuery(null)
       setMentionResults([])
@@ -370,6 +386,7 @@ export default function ComposeBox({ onPost, replyTo = null, autoFocus = false }
   if (!user) return null
 
   return (
+    <>
     <form onSubmit={submit} className="flex gap-3 p-4 border-b border-slate-700/50">
       <img
         src={profile?.avatar || `https://api.dicebear.com/9.x/thumbs/svg?seed=user`}
@@ -383,37 +400,17 @@ export default function ComposeBox({ onPost, replyTo = null, autoFocus = false }
           </p>
         )}
 
-        <div className="relative">
-          <textarea
-            ref={textareaRef}
-            value={content}
-            onChange={handleContentChange}
-            onKeyDown={e => { if (e.key === 'Escape') { setMentionResults([]); setMentionQuery(null) } }}
-            placeholder={replyTo ? 'Post your reply…' : "What's happening in ANCHOR?"}
-            autoFocus={autoFocus}
-            rows={3}
-            className="w-full bg-transparent text-white placeholder-slate-500 text-sm resize-none focus:outline-none leading-relaxed"
-            maxLength={MAX_CHARS + 50}
-          />
-          {mentionResults.length > 0 && (
-            <div className="absolute left-0 right-0 top-full mt-1 bg-[#1e293b] border border-slate-700 rounded-xl shadow-xl z-50 overflow-hidden">
-              {mentionResults.map(u => (
-                <button
-                  key={u.id}
-                  type="button"
-                  onMouseDown={e => { e.preventDefault(); insertMention(u.username) }}
-                  className="flex items-center gap-2 w-full px-3 py-2 hover:bg-slate-800 transition text-left"
-                >
-                  <img src={u.avatar || `https://api.dicebear.com/9.x/thumbs/svg?seed=${u.username}`} alt="" className="w-7 h-7 rounded-full object-cover shrink-0" />
-                  <div>
-                    <p className="text-sm text-white">{u.displayName}</p>
-                    <p className="text-xs text-slate-500">@{u.username}</p>
-                  </div>
-                </button>
-              ))}
-            </div>
-          )}
-        </div>
+        <textarea
+          ref={textareaRef}
+          value={content}
+          onChange={handleContentChange}
+          onKeyDown={e => { if (e.key === 'Escape') { setMentionResults([]); setMentionQuery(null) } }}
+          placeholder={replyTo ? 'Post your reply…' : "What's happening in ANCHOR?"}
+          autoFocus={autoFocus}
+          rows={3}
+          className="w-full bg-transparent text-white placeholder-slate-500 text-sm resize-none focus:outline-none leading-relaxed"
+          maxLength={MAX_CHARS + 50}
+        />
 
         {/* Image grid */}
         {images.length > 0 && (
@@ -631,6 +628,31 @@ export default function ComposeBox({ onPost, replyTo = null, autoFocus = false }
         </div>
       </div>
     </form>
+
+    {/* @mention dropdown — fixed so it's never clipped by overflow */}
+    {mentionResults.length > 0 && mentionPos && (
+      <div
+        data-mention-dropdown="true"
+        style={{ position: 'fixed', top: mentionPos.top, left: mentionPos.left, width: mentionPos.width, zIndex: 9999 }}
+        className="bg-[#1e293b] border border-slate-700 rounded-xl shadow-2xl overflow-hidden"
+      >
+        {mentionResults.map(u => (
+          <button
+            key={u.id}
+            type="button"
+            onMouseDown={e => { e.preventDefault(); insertMention(u.username) }}
+            className="flex items-center gap-2 w-full px-3 py-2.5 hover:bg-slate-800 transition text-left"
+          >
+            <img src={u.avatar || `https://api.dicebear.com/9.x/thumbs/svg?seed=${u.username}`} alt="" className="w-7 h-7 rounded-full object-cover shrink-0" />
+            <div>
+              <p className="text-sm text-white">{u.displayName}</p>
+              <p className="text-xs text-slate-500">@{u.username}</p>
+            </div>
+          </button>
+        ))}
+      </div>
+    )}
+  </>
   )
 }
 

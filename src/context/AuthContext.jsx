@@ -1,6 +1,6 @@
-import { createContext, useContext, useEffect, useState } from 'react'
+import { createContext, useContext, useEffect, useRef, useState } from 'react'
 import { onAuthStateChanged } from 'firebase/auth'
-import { doc, getDoc, setDoc, updateDoc, serverTimestamp } from 'firebase/firestore'
+import { doc, getDoc, onSnapshot, setDoc, updateDoc, serverTimestamp } from 'firebase/firestore'
 import { auth, db } from '../firebase'
 
 const AuthContext = createContext(null)
@@ -9,25 +9,26 @@ export function AuthProvider({ children }) {
   const [user, setUser] = useState(null)
   const [profile, setProfile] = useState(null)
   const [loading, setLoading] = useState(true)
+  const profileUnsubRef = useRef(null)
 
   useEffect(() => {
-    return onAuthStateChanged(auth, async (firebaseUser) => {
-      setUser(firebaseUser)
-      if (firebaseUser) {
-        try {
-          const ref = doc(db, 'users', firebaseUser.uid)
-          const snap = await getDoc(ref)
+    const authUnsub = onAuthStateChanged(auth, async (firebaseUser) => {
+      // Tear down any previous profile listener
+      if (profileUnsubRef.current) { profileUnsubRef.current(); profileUnsubRef.current = null }
 
-          if (snap.exists()) {
-            setProfile({ id: snap.id, ...snap.data() })
-            updateDoc(ref, { lastSeen: serverTimestamp() }).catch(() => {})
-          } else {
+      setUser(firebaseUser)
+
+      if (firebaseUser) {
+        const ref = doc(db, 'users', firebaseUser.uid)
+
+        try {
+          const snap = await getDoc(ref)
+          if (!snap.exists()) {
             const username = firebaseUser.email
               ?.split('@')[0]
               ?.toLowerCase()
               .replace(/[^a-z0-9_]/g, '_') || firebaseUser.uid.slice(0, 8)
-
-            const defaultProfile = {
+            await setDoc(ref, {
               uid: firebaseUser.uid,
               displayName: firebaseUser.displayName || username,
               username,
@@ -41,29 +42,29 @@ export function AuthProvider({ children }) {
               postCount: 0,
               lastSeen: serverTimestamp(),
               createdAt: serverTimestamp(),
-            }
-            await setDoc(ref, defaultProfile)
-            setProfile({ id: firebaseUser.uid, ...defaultProfile })
+            })
+          } else {
+            updateDoc(ref, { lastSeen: serverTimestamp() }).catch(() => {})
           }
         } catch (err) {
-          console.error('Profile load error:', err.message)
-          const username = firebaseUser.email?.split('@')[0]?.toLowerCase() || 'user'
-          setProfile({
-            id: firebaseUser.uid,
-            uid: firebaseUser.uid,
-            displayName: firebaseUser.displayName || username,
-            username,
-            avatar: `https://api.dicebear.com/9.x/thumbs/svg?seed=${username}`,
-            role: 'member',
-            followers: [],
-            following: [],
-          })
+          console.error('Profile init error:', err.message)
         }
+
+        // Real-time listener — keeps profile.following and all fields in sync
+        profileUnsubRef.current = onSnapshot(ref, snap => {
+          if (snap.exists()) setProfile({ id: snap.id, ...snap.data() })
+          setLoading(false)
+        }, () => setLoading(false))
       } else {
         setProfile(null)
+        setLoading(false)
       }
-      setLoading(false)
     })
+
+    return () => {
+      authUnsub()
+      if (profileUnsubRef.current) profileUnsubRef.current()
+    }
   }, [])
 
   // Keep lastSeen fresh

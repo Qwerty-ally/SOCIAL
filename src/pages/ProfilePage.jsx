@@ -127,21 +127,25 @@ export default function ProfilePage() {
     if (!user) return toast.error('Sign in to follow')
     const myRef = doc(db, 'users', user.uid)
     const theirRef = doc(db, 'users', profile.id)
-    if (followed) {
-      await updateDoc(myRef, { following: arrayRemove(profile.id) })
-      await updateDoc(theirRef, { followers: arrayRemove(user.uid) })
-      setFollowed(false)
-      toast('Unfollowed')
-    } else {
-      await updateDoc(myRef, { following: arrayUnion(profile.id) })
-      await updateDoc(theirRef, { followers: arrayUnion(user.uid) })
-      await addDoc(collection(db, 'notifications'), {
-        type: 'follow', to: profile.id, from: user.uid,
-        fromName: myProfile?.displayName, fromAvatar: myProfile?.avatar,
-        read: false, createdAt: serverTimestamp(),
-      })
-      setFollowed(true)
-      toast.success(`Following @${profile.username}`)
+    try {
+      if (followed) {
+        await updateDoc(myRef, { following: arrayRemove(profile.id) })
+        await updateDoc(theirRef, { followers: arrayRemove(user.uid) })
+        setFollowed(false)
+        toast('Unfollowed')
+      } else {
+        await updateDoc(myRef, { following: arrayUnion(profile.id) })
+        await updateDoc(theirRef, { followers: arrayUnion(user.uid) })
+        addDoc(collection(db, 'notifications'), {
+          type: 'follow', to: profile.id, from: user.uid,
+          fromName: myProfile?.displayName, fromAvatar: myProfile?.avatar,
+          read: false, createdAt: serverTimestamp(),
+        }).catch(() => {})
+        setFollowed(true)
+        toast.success(`Following @${profile.username}`)
+      }
+    } catch (err) {
+      toast.error(err.message)
     }
   }
 
