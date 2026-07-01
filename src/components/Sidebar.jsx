@@ -6,7 +6,7 @@ import { useNotifCount } from '../hooks/useNotifCount'
 import ThemePicker from './ThemePicker'
 import {
   Anchor, Home, Search, Bell, User, PlusSquare, MessageCircle,
-  Compass, LogOut, Bookmark, TrendingUp, Crown, Radio, Shield, Users
+  Compass, LogOut, Bookmark, TrendingUp, Crown, Radio, Users
 } from 'lucide-react'
 import toast from 'react-hot-toast'
 
@@ -27,7 +27,6 @@ export default function Sidebar() {
     ...(!isFan ? [{ to: '/messages', icon: <MessageCircle size={22} />, label: 'Messages' }] : []),
     { to: '/bookmarks',      icon: <Bookmark size={22} />,    label: 'Bookmarks' },
     { to: `/profile/${profile?.username}`, icon: <User size={22} />, label: 'Profile' },
-    ...(isOwner ? [{ to: '/admin', icon: <Shield size={22} />, label: 'Admin' }] : []),
   ]
 
   async function logout() {
@@ -37,7 +36,7 @@ export default function Sidebar() {
   }
 
   return (
-    <aside className="hidden md:flex flex-col justify-between w-64 shrink-0 h-screen sticky top-0 border-r border-slate-700/60 px-4 py-6">
+    <aside className="hidden md:flex flex-col justify-between w-64 shrink-0 h-screen sticky top-0 border-r border-slate-700/60 px-4 py-6 z-20">
       {/* Logo */}
       <div>
         <Link to="/" className="flex items-center gap-2 mb-8 px-2">

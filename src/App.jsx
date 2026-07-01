@@ -16,7 +16,6 @@ import ComposePage from './pages/ComposePage'
 import GoLivePage from './pages/GoLivePage'
 import WatchLivePage from './pages/WatchLivePage'
 import WatchPartyPage from './pages/WatchPartyPage'
-import AdminPage from './pages/AdminPage'
 import { Loader2 } from 'lucide-react'
 
 function Layout({ children }) {
@@ -48,12 +47,6 @@ function FanGuard({ children }) {
   return children
 }
 
-function OwnerGuard({ children }) {
-  const { profile } = useAuth()
-  if (profile?.role !== 'owner') return <Navigate to="/" replace />
-  return children
-}
-
 function AppRoutes() {
   const { user, loading } = useAuth()
 
@@ -77,7 +70,6 @@ function AppRoutes() {
       <Route path="/watch/:streamId" element={<ProtectedRoute><Layout><WatchLivePage /></Layout></ProtectedRoute>} />
       <Route path="/watch-party" element={<ProtectedRoute><Layout><FanGuard><WatchPartyPage /></FanGuard></Layout></ProtectedRoute>} />
       <Route path="/watch-party/:partyId" element={<ProtectedRoute><Layout><FanGuard><WatchPartyPage /></FanGuard></Layout></ProtectedRoute>} />
-      <Route path="/admin" element={<ProtectedRoute><Layout><OwnerGuard><AdminPage /></OwnerGuard></Layout></ProtectedRoute>} />
       <Route path="/post/:id" element={<ProtectedRoute><Layout><PostPage /></Layout></ProtectedRoute>} />
       <Route path="/profile/:username" element={<ProtectedRoute><Layout><ProfilePage /></Layout></ProtectedRoute>} />
       <Route path="*" element={<Navigate to="/" replace />} />
