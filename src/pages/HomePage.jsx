@@ -26,10 +26,13 @@ export default function HomePage() {
     const q = query(
       collection(db, 'watchParties'),
       where('status', 'in', ['starting-soon', 'live']),
-      orderBy('createdAt', 'desc'),
       limit(10)
     )
-    return onSnapshot(q, snap => setWatchParties(snap.docs.map(d => ({ id: d.id, ...d.data() }))), () => {})
+    return onSnapshot(q, snap => {
+      const list = snap.docs.map(d => ({ id: d.id, ...d.data() }))
+      list.sort((a, b) => (b.createdAt?.toMillis?.() ?? 0) - (a.createdAt?.toMillis?.() ?? 0))
+      setWatchParties(list)
+    }, () => {})
   }, [])
 
   useEffect(() => {

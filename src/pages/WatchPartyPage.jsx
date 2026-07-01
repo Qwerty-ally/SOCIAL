@@ -389,11 +389,12 @@ function PartyLobby({ navigate, user, profile }) {
     const q = query(
       collection(db, 'watchParties'),
       where('status', 'in', ['starting-soon', 'live']),
-      orderBy('createdAt', 'desc'),
       limit(20)
     )
     const unsub = onSnapshot(q, snap => {
-      setParties(snap.docs.map(d => ({ id: d.id, ...d.data() })))
+      const list = snap.docs.map(d => ({ id: d.id, ...d.data() }))
+      list.sort((a, b) => (b.createdAt?.toMillis?.() ?? 0) - (a.createdAt?.toMillis?.() ?? 0))
+      setParties(list)
       setLoadingParties(false)
     }, () => setLoadingParties(false))
     return () => unsub()
