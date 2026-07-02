@@ -32,10 +32,12 @@ export default function WatchLivePage() {
   const [showViewers, setShowViewers] = useState(false)
   const [loading, setLoading] = useState(true)
   const [stageStatus, setStageStatus] = useState(null) // null | 'invited' | 'connecting' | 'on-stage'
+  const [stageFeeds, setStageFeeds] = useState([]) // [{uid, name, avatar, stream}]
   const videoRef = useRef(null)
   const pc = useRef(null)
   const stageStream = useRef(null)
   const stagePc = useRef(null)
+  const stageFeedPCs = useRef({})
   const unsubs = useRef([])
 
   useEffect(() => {
@@ -136,6 +138,9 @@ export default function WatchLivePage() {
           stageStream.current = null
           stagePc.current?.close()
           stagePc.current = null
+          Object.values(stageFeedPCs.current).forEach(p => p.close())
+          stageFeedPCs.current = {}
+          setStageFeeds([])
           setStageStatus(null)
           toast('You have been removed from the stage')
         }
@@ -146,6 +151,47 @@ export default function WatchLivePage() {
       console.error(err)
       toast.error('Failed to join stream')
       setLoading(false)
+    }
+  }
+
+  async function connectStageFeed(fromUid, feedData) {
+    if (!feedData.offer || stageFeedPCs.current[fromUid]) return
+
+    const feedPc = new RTCPeerConnection(ICE)
+    stageFeedPCs.current[fromUid] = feedPc
+
+    const remoteStream = new MediaStream()
+
+    feedPc.ontrack = e => {
+      e.streams[0].getTracks().forEach(t => remoteStream.addTrack(t))
+      setStageFeeds(prev => prev.some(f => f.uid === fromUid) ? prev : [
+        ...prev, { uid: fromUid, name: feedData.fromName, avatar: feedData.fromAvatar, stream: remoteStream }
+      ])
+    }
+
+    feedPc.onicecandidate = async e => {
+      if (e.candidate) {
+        await addDoc(collection(db, 'streams', streamId, 'stageInvites', user.uid, 'stageFeeds', fromUid, 'guestCandidates'), e.candidate.toJSON())
+      }
+    }
+
+    try {
+      await feedPc.setRemoteDescription(new RTCSessionDescription(feedData.offer))
+      const answer = await feedPc.createAnswer()
+      await feedPc.setLocalDescription(answer)
+      await updateDoc(doc(db, 'streams', streamId, 'stageInvites', user.uid, 'stageFeeds', fromUid), {
+        answer: { type: answer.type, sdp: answer.sdp }
+      })
+
+      const cUnsub = onSnapshot(collection(db, 'streams', streamId, 'stageInvites', user.uid, 'stageFeeds', fromUid, 'hostCandidates'), snap => {
+        snap.docChanges().forEach(c => {
+          if (c.type === 'added') feedPc.addIceCandidate(new RTCIceCandidate(c.doc.data())).catch(() => {})
+        })
+      })
+      unsubs.current.push(cUnsub)
+    } catch {
+      feedPc.close()
+      delete stageFeedPCs.current[fromUid]
     }
   }
 
@@ -173,6 +219,16 @@ export default function WatchLivePage() {
         })
       })
       unsubs.current.push(cUnsub)
+
+      // Listen for other stage guests' streams relayed by host
+      const feedsUnsub = onSnapshot(collection(db, 'streams', streamId, 'stageInvites', user.uid, 'stageFeeds'), snap => {
+        snap.docChanges().forEach(change => {
+          if (change.type === 'added') {
+            connectStageFeed(change.doc.id, change.doc.data())
+          }
+        })
+      })
+      unsubs.current.push(feedsUnsub)
 
       const offer = await spc.createOffer()
       await spc.setLocalDescription(offer)
@@ -203,6 +259,9 @@ export default function WatchLivePage() {
     stageStream.current = null
     stagePc.current?.close()
     stagePc.current = null
+    Object.values(stageFeedPCs.current).forEach(p => p.close())
+    stageFeedPCs.current = {}
+    setStageFeeds([])
     setStageStatus(null)
     try {
       await updateDoc(doc(db, 'streams', streamId, 'stageInvites', user.uid), { status: 'removed' })
@@ -217,6 +276,8 @@ export default function WatchLivePage() {
     stageStream.current = null
     stagePc.current?.close()
     stagePc.current = null
+    Object.values(stageFeedPCs.current).forEach(p => p.close())
+    stageFeedPCs.current = {}
   }
 
   if (loading) return (
@@ -290,6 +351,24 @@ export default function WatchLivePage() {
               >
                 <PhoneOff size={11} /> Leave Stage
               </button>
+            </div>
+          )}
+
+          {/* Other stage guests' video feeds */}
+          {stageStatus === 'on-stage' && stageFeeds.length > 0 && (
+            <div className="absolute bottom-3 right-36 z-10 flex flex-col gap-2">
+              {stageFeeds.map(f => (
+                <div key={f.uid} className="relative w-32 h-24 rounded-xl overflow-hidden border-2 border-purple-500/80 shadow-lg">
+                  <video
+                    ref={el => { if (el && f.stream) el.srcObject = f.stream }}
+                    autoPlay playsInline
+                    className="w-full h-full object-cover"
+                  />
+                  <div className="absolute bottom-1 left-0 right-0 text-center px-1">
+                    <span className="text-[9px] text-white font-bold bg-black/60 px-1.5 py-0.5 rounded-full">{f.name || 'Guest'}</span>
+                  </div>
+                </div>
+              ))}
             </div>
           )}
 

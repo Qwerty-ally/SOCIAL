@@ -5,7 +5,7 @@ import { useAuth } from '../context/AuthContext'
 import { Send, MessageCircle, Ban, Mic } from 'lucide-react'
 import toast from 'react-hot-toast'
 
-export default function StreamChat({ streamId, isHost, onInviteToStage, stagedUids }) {
+export default function StreamChat({ streamId, isHost, onInviteToStage, stagedUids, onUserBlocked }) {
   const { user, profile } = useAuth()
   const [messages, setMessages] = useState([])
   const [text, setText] = useState('')
@@ -27,7 +27,7 @@ export default function StreamChat({ streamId, isHost, onInviteToStage, stagedUi
     setText('')
     await addDoc(collection(db, 'streams', streamId, 'chat'), {
       uid: user.uid,
-      displayName: profile?.displayName || 'Viewer',
+      displayName: profile?.displayName || profile?.username || 'Viewer',
       username: profile?.username || '',
       avatar: profile?.avatar || '',
       text: msg,
@@ -39,6 +39,7 @@ export default function StreamChat({ streamId, isHost, onInviteToStage, stagedUi
     if (!confirm(`Block ${displayName} from this stream?`)) return
     await updateDoc(doc(db, 'streams', streamId), { blockedUsers: arrayUnion(uid) })
     toast.success(`${displayName} has been blocked`)
+    onUserBlocked?.(uid)
   }
 
   return (
@@ -60,7 +61,7 @@ export default function StreamChat({ streamId, isHost, onInviteToStage, stagedUi
               className="w-6 h-6 rounded-full object-cover shrink-0 mt-0.5"
             />
             <div className="flex-1 min-w-0">
-              <span className="text-[11px] font-semibold text-sky-400 mr-1.5">{m.displayName}</span>
+              <span className="text-[11px] font-semibold text-sky-400 mr-1.5">{m.displayName || m.username || 'Viewer'}</span>
               <span className="text-[13px] text-slate-200 break-words">{m.text}</span>
             </div>
             {isHost && m.uid !== user?.uid && (

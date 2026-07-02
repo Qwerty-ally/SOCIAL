@@ -40,6 +40,8 @@ export default function GoLivePage() {
   const peerConns = useRef({})
   const stagePCs = useRef({})
   const guestStreams = useRef({})
+  const guestInfo = useRef({})
+  const stageRelayPCs = useRef({})
   const unsubs = useRef([])
 
   useEffect(() => {
@@ -166,6 +168,7 @@ export default function GoLivePage() {
   }
 
   async function connectStageGuest(sid, guestUid, inviteData) {
+    guestInfo.current[guestUid] = { name: inviteData.viewerName, avatar: inviteData.viewerAvatar || '' }
     const pc = new RTCPeerConnection(ICE)
     stagePCs.current[guestUid] = pc
 
@@ -175,6 +178,14 @@ export default function GoLivePage() {
       e.streams[0].getTracks().forEach(t => remoteStream.addTrack(t))
       guestStreams.current[guestUid] = remoteStream
       setStageGuests(prev => prev.map(g => g.uid === guestUid ? { ...g, stream: remoteStream } : g))
+
+      // Relay this guest's stream to all other connected stage guests
+      Object.keys(stagePCs.current)
+        .filter(uid => uid !== guestUid && guestStreams.current[uid])
+        .forEach(otherUid => {
+          sendGuestStreamToGuest(sid, guestUid, otherUid)
+          sendGuestStreamToGuest(sid, otherUid, guestUid)
+        })
     }
 
     pc.onicecandidate = async e => {
@@ -217,11 +228,61 @@ export default function GoLivePage() {
   }
 
   function removeStageGuest(guestUid) {
+    Object.entries(stageRelayPCs.current).forEach(([key, rpc]) => {
+      if (key.startsWith(`${guestUid}→`) || key.endsWith(`→${guestUid}`)) {
+        rpc.close()
+        delete stageRelayPCs.current[key]
+      }
+    })
+    delete guestInfo.current[guestUid]
     stagePCs.current[guestUid]?.close()
     delete stagePCs.current[guestUid]
     delete guestStreams.current[guestUid]
     setStageGuests(prev => prev.filter(g => g.uid !== guestUid))
     setInvitedUids(prev => { const s = new Set(prev); s.delete(guestUid); return s })
+  }
+
+  async function sendGuestStreamToGuest(sid, fromUid, toUid) {
+    const key = `${fromUid}→${toUid}`
+    if (stageRelayPCs.current[key]) return
+    const fromStream = guestStreams.current[fromUid]
+    if (!fromStream) return
+
+    const rpc = new RTCPeerConnection(ICE)
+    stageRelayPCs.current[key] = rpc
+
+    fromStream.getTracks().forEach(t => rpc.addTrack(t, fromStream))
+
+    rpc.onicecandidate = async e => {
+      if (e.candidate) {
+        await addDoc(collection(db, 'streams', sid, 'stageInvites', toUid, 'stageFeeds', fromUid, 'hostCandidates'), e.candidate.toJSON())
+      }
+    }
+
+    const offer = await rpc.createOffer()
+    await rpc.setLocalDescription(offer)
+
+    const { name, avatar } = guestInfo.current[fromUid] || {}
+    await setDoc(doc(db, 'streams', sid, 'stageInvites', toUid, 'stageFeeds', fromUid), {
+      offer: { type: offer.type, sdp: offer.sdp },
+      fromName: name || '',
+      fromAvatar: avatar || '',
+    })
+
+    const unsub = onSnapshot(doc(db, 'streams', sid, 'stageInvites', toUid, 'stageFeeds', fromUid), async snap => {
+      const data = snap.data()
+      if (data?.answer && !rpc.remoteDescription) {
+        await rpc.setRemoteDescription(new RTCSessionDescription(data.answer)).catch(() => {})
+      }
+    })
+    unsubs.current.push(unsub)
+
+    const unsub2 = onSnapshot(collection(db, 'streams', sid, 'stageInvites', toUid, 'stageFeeds', fromUid, 'guestCandidates'), snap => {
+      snap.docChanges().forEach(c => {
+        if (c.type === 'added') rpc.addIceCandidate(new RTCIceCandidate(c.doc.data())).catch(() => {})
+      })
+    })
+    unsubs.current.push(unsub2)
   }
 
   async function endLive() {
@@ -238,7 +299,10 @@ export default function GoLivePage() {
     peerConns.current = {}
     Object.values(stagePCs.current).forEach(pc => pc.close())
     stagePCs.current = {}
+    Object.values(stageRelayPCs.current).forEach(pc => pc.close())
+    stageRelayPCs.current = {}
     guestStreams.current = {}
+    guestInfo.current = {}
     localStream.current?.getTracks().forEach(t => t.stop())
   }
 
@@ -369,6 +433,11 @@ export default function GoLivePage() {
             isHost={true}
             onInviteToStage={inviteToStage}
             stagedUids={stagedUids}
+            onUserBlocked={uid => {
+              if (stagePCs.current[uid] || stageGuests.some(g => g.uid === uid)) {
+                removeFromStage(uid)
+              }
+            }}
           />
         </div>
       )}

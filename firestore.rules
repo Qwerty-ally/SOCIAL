@@ -73,6 +73,15 @@ service cloud.firestore {
         match /hostCandidates/{id} {
           allow read, write: if isAuth();
         }
+        match /stageFeeds/{feedId} {
+          allow read, write: if isAuth();
+          match /hostCandidates/{id} {
+            allow read, write: if isAuth();
+          }
+          match /guestCandidates/{id} {
+            allow read, write: if isAuth();
+          }
+        }
       }
     }
 
