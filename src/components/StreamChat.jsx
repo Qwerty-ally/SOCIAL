@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from 'react'
-import { collection, query, orderBy, limit, onSnapshot, addDoc, serverTimestamp, doc, updateDoc, arrayUnion } from 'firebase/firestore'
+import { collection, query, orderBy, limit, onSnapshot, addDoc, serverTimestamp, doc, updateDoc, arrayUnion, getDoc } from 'firebase/firestore'
 import { db } from '../firebase'
 import { useAuth } from '../context/AuthContext'
 import { Send, MessageCircle, Ban, Mic } from 'lucide-react'
@@ -9,6 +9,7 @@ export default function StreamChat({ streamId, isHost, isOwner, onInviteToStage,
   const { user, profile } = useAuth()
   const [messages, setMessages] = useState([])
   const [text, setText] = useState('')
+  const [userCache, setUserCache] = useState({})
   const bottomRef = useRef(null)
 
   useEffect(() => {
@@ -19,6 +20,19 @@ export default function StreamChat({ streamId, isHost, isOwner, onInviteToStage,
       setTimeout(() => bottomRef.current?.scrollIntoView({ behavior: 'smooth' }), 50)
     }, () => {})
   }, [streamId])
+
+  // Fetch each unique sender's real profile once and cache it
+  useEffect(() => {
+    const uncached = [...new Set(messages.map(m => m.uid).filter(uid => uid && !userCache[uid]))]
+    uncached.forEach(uid => {
+      getDoc(doc(db, 'users', uid)).then(snap => {
+        if (snap.exists()) {
+          const d = snap.data()
+          setUserCache(prev => ({ ...prev, [uid]: { displayName: d.displayName, username: d.username, avatar: d.avatar } }))
+        }
+      }).catch(() => {})
+    })
+  }, [messages])
 
   async function send(e) {
     e.preventDefault()
@@ -53,22 +67,26 @@ export default function StreamChat({ streamId, isHost, isOwner, onInviteToStage,
         {messages.length === 0 && (
           <p className="text-center text-slate-600 text-xs py-4">No messages yet. Say something!</p>
         )}
-        {messages.map(m => (
+        {messages.map(m => {
+          const cached = userCache[m.uid] || {}
+          const name = cached.displayName || cached.username || m.displayName || m.username || 'Viewer'
+          const avatar = cached.avatar || m.avatar || `https://api.dicebear.com/9.x/thumbs/svg?seed=${m.uid}`
+          return (
           <div key={m.id} className="flex gap-2 items-start group">
             <img
-              src={m.avatar || `https://api.dicebear.com/9.x/thumbs/svg?seed=${m.username}`}
+              src={avatar}
               alt=""
               className="w-6 h-6 rounded-full object-cover shrink-0 mt-0.5"
             />
             <div className="flex-1 min-w-0">
-              <span className="text-[11px] font-semibold text-sky-400 mr-1.5">{m.displayName || m.username || 'Viewer'}</span>
+              <span className="text-[11px] font-semibold text-sky-400 mr-1.5">{name}</span>
               <span className="text-[13px] text-slate-200 break-words">{m.text}</span>
             </div>
             {(isHost || isOwner) && m.uid !== user?.uid && (
               <div className="md:opacity-0 md:group-hover:opacity-100 flex items-center gap-1 transition shrink-0">
                 {onInviteToStage && (
                   <button
-                    onClick={() => onInviteToStage(m.uid, m.displayName || m.username, m.avatar)}
+                    onClick={() => onInviteToStage(m.uid, name, avatar)}
                     disabled={stagedUids?.has(m.uid)}
                     className="p-2 md:p-1 rounded-full text-slate-400 md:text-slate-600 hover:text-sky-400 hover:bg-sky-400/10 active:bg-sky-400/20 transition disabled:opacity-30 disabled:cursor-not-allowed"
                     title={stagedUids?.has(m.uid) ? 'Already on stage' : 'Invite to stage'}
@@ -79,7 +97,7 @@ export default function StreamChat({ streamId, isHost, isOwner, onInviteToStage,
                 )}
                 {isHost && (
                   <button
-                    onClick={() => blockUser(m.uid, m.displayName)}
+                    onClick={() => blockUser(m.uid, name)}
                     className="p-2 md:p-1 rounded-full text-slate-400 md:text-slate-600 hover:text-red-400 hover:bg-red-400/10 active:bg-red-400/20 transition"
                     title="Block from stream"
                   >
@@ -90,7 +108,8 @@ export default function StreamChat({ streamId, isHost, isOwner, onInviteToStage,
               </div>
             )}
           </div>
-        ))}
+          )
+        })}
         <div ref={bottomRef} />
       </div>
 
