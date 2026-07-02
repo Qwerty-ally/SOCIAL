@@ -104,6 +104,9 @@ export default function PostCard({ post, onDelete }) {
   const [editLabel, setEditLabel] = useState('')
   const [editTo, setEditTo] = useState('')
   const [savingEdit, setSavingEdit] = useState(false)
+  const [editingPost, setEditingPost] = useState(false)
+  const [editContent, setEditContent] = useState('')
+  const [savingPostEdit, setSavingPostEdit] = useState(false)
   const heartRef = useRef(null)
 
   const timeAgo = post.createdAt?.toDate
@@ -226,6 +229,30 @@ export default function PostCard({ post, onDelete }) {
     setShowMenu(false)
   }
 
+  function openPostEdit(e) {
+    e.stopPropagation()
+    setEditContent(post.content || '')
+    setEditingPost(true)
+    setShowMenu(false)
+  }
+
+  async function savePostEdit(e) {
+    e.stopPropagation()
+    if (!editContent.trim()) return toast.error('Post cannot be empty')
+    setSavingPostEdit(true)
+    try {
+      await updateDoc(doc(db, 'posts', post.id), {
+        content: editContent.trim(),
+        editedAt: serverTimestamp(),
+      })
+      setEditingPost(false)
+      toast.success('Post updated!')
+    } catch (err) {
+      toast.error(err.message)
+    }
+    setSavingPostEdit(false)
+  }
+
   function openCountdownEdit(e) {
     e.stopPropagation()
     const raw = post.countdownTo?.toDate ? post.countdownTo.toDate() : new Date(post.countdownTo)
@@ -344,6 +371,9 @@ export default function PostCard({ post, onDelete }) {
                   {profile?.role !== 'fan' && (
                     <MenuItem icon={<BookImage size={14} />} label="Share to story" onClick={shareToStory} />
                   )}
+                  {user?.uid === post.authorId && (
+                    <MenuItem icon={<Edit3 size={14} />} label="Edit post" onClick={openPostEdit} />
+                  )}
                   {post.postType === 'countdown' && user?.uid === post.authorId && (
                     <MenuItem icon={<Edit3 size={14} />} label="Edit countdown" onClick={openCountdownEdit} />
                   )}
@@ -364,7 +394,37 @@ export default function PostCard({ post, onDelete }) {
           )}
 
           {/* Content */}
-          <p className="mt-1.5 text-sm text-slate-200 whitespace-pre-wrap leading-relaxed">{renderContent(post.content)}</p>
+          {editingPost ? (
+            <div className="mt-1.5" onClick={e => e.stopPropagation()}>
+              <textarea
+                value={editContent}
+                onChange={e => setEditContent(e.target.value)}
+                rows={Math.max(3, editContent.split('\n').length)}
+                autoFocus
+                className="w-full bg-slate-700/60 border border-slate-600 rounded-xl px-3 py-2 text-sm text-white placeholder-slate-500 focus:outline-none focus:ring-1 focus:ring-sky-500 resize-none"
+              />
+              <div className="flex gap-2 mt-2">
+                <button
+                  onClick={() => setEditingPost(false)}
+                  className="flex-1 py-1.5 border border-slate-600 text-slate-300 text-xs font-semibold rounded-lg hover:bg-slate-700 transition"
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={savePostEdit}
+                  disabled={savingPostEdit || !editContent.trim()}
+                  className="flex-1 py-1.5 bg-sky-500 hover:bg-sky-400 text-white text-xs font-semibold rounded-lg transition disabled:opacity-50"
+                >
+                  {savingPostEdit ? 'Saving…' : 'Save'}
+                </button>
+              </div>
+            </div>
+          ) : (
+            <p className="mt-1.5 text-sm text-slate-200 whitespace-pre-wrap leading-relaxed">
+              {renderContent(post.content)}
+              {post.editedAt && <span className="text-[10px] text-slate-500 ml-1">(edited)</span>}
+            </p>
+          )}
 
           {/* Event card */}
           {post.postType === 'event' && post.eventTitle && (
