@@ -65,24 +65,26 @@ export default function StreamChat({ streamId, isHost, isOwner, onInviteToStage,
               <span className="text-[13px] text-slate-200 break-words">{m.text}</span>
             </div>
             {(isHost || isOwner) && m.uid !== user?.uid && (
-              <div className="md:opacity-0 md:group-hover:opacity-100 flex items-center gap-0.5 transition shrink-0">
+              <div className="md:opacity-0 md:group-hover:opacity-100 flex items-center gap-1 transition shrink-0">
                 {onInviteToStage && (
                   <button
                     onClick={() => onInviteToStage(m.uid, m.displayName || m.username, m.avatar)}
                     disabled={stagedUids?.has(m.uid)}
-                    className="p-1 rounded-full text-slate-600 hover:text-sky-400 hover:bg-sky-400/10 transition disabled:opacity-30 disabled:cursor-not-allowed"
+                    className="p-2 md:p-1 rounded-full text-slate-400 md:text-slate-600 hover:text-sky-400 hover:bg-sky-400/10 active:bg-sky-400/20 transition disabled:opacity-30 disabled:cursor-not-allowed"
                     title={stagedUids?.has(m.uid) ? 'Already on stage' : 'Invite to stage'}
                   >
-                    <Mic size={12} />
+                    <Mic size={15} className="md:hidden" />
+                    <Mic size={12} className="hidden md:block" />
                   </button>
                 )}
                 {isHost && (
                   <button
                     onClick={() => blockUser(m.uid, m.displayName)}
-                    className="p-1 rounded-full text-slate-600 hover:text-red-400 hover:bg-red-400/10 transition"
+                    className="p-2 md:p-1 rounded-full text-slate-400 md:text-slate-600 hover:text-red-400 hover:bg-red-400/10 active:bg-red-400/20 transition"
                     title="Block from stream"
                   >
-                    <Ban size={12} />
+                    <Ban size={15} className="md:hidden" />
+                    <Ban size={12} className="hidden md:block" />
                   </button>
                 )}
               </div>
