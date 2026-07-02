@@ -339,21 +339,35 @@ export default function GoLivePage() {
               <span className="bg-red-500 text-white text-xs font-bold px-2 py-1 rounded-full flex items-center gap-1.5">
                 <span className="w-1.5 h-1.5 bg-white rounded-full animate-pulse" />LIVE
               </span>
-              <div
-                className="relative"
-                onMouseEnter={() => setShowViewers(true)}
-                onMouseLeave={() => setShowViewers(false)}
-              >
-                <span className="bg-black/60 text-white text-xs px-2 py-1 rounded-full flex items-center gap-1 cursor-pointer select-none">
+              <div className="relative">
+                <button
+                  onClick={() => setShowViewers(v => !v)}
+                  className="bg-black/60 text-white text-xs px-2 py-1 rounded-full flex items-center gap-1 cursor-pointer select-none"
+                >
                   <Users size={10} />{viewerCount}
-                </span>
-                {showViewers && viewerList.length > 0 && (
-                  <div className="absolute left-0 top-full mt-1.5 bg-[#1e293b] border border-slate-700 rounded-xl shadow-2xl z-30 py-1.5 min-w-44 max-h-64 overflow-y-auto anchor-scrollbar">
-                    <p className="text-[10px] text-slate-500 font-semibold uppercase tracking-wider px-3 pb-1.5">Watching now</p>
+                </button>
+                {showViewers && (
+                  <div className="absolute left-0 top-full mt-1.5 bg-[#1e293b] border border-slate-700 rounded-xl shadow-2xl z-30 py-1.5 min-w-52 max-h-72 overflow-y-auto anchor-scrollbar">
+                    <p className="text-[10px] text-slate-500 font-semibold uppercase tracking-wider px-3 pb-1.5">
+                      Watching now · tap 🎤 to invite
+                    </p>
+                    {viewerList.length === 0 && (
+                      <p className="text-xs text-slate-500 px-3 py-1">No viewers yet</p>
+                    )}
                     {viewerList.map(v => (
                       <div key={v.uid} className="flex items-center gap-2 px-3 py-1.5">
                         <img src={v.avatar || `https://api.dicebear.com/9.x/thumbs/svg?seed=${v.uid}`} alt="" className="w-6 h-6 rounded-full object-cover shrink-0" />
-                        <span className="text-sm text-white truncate">{v.displayName || 'Viewer'}</span>
+                        <span className="text-sm text-white truncate flex-1">{v.displayName || v.username || 'Viewer'}</span>
+                        {v.uid !== user?.uid && (
+                          <button
+                            onClick={() => { inviteToStage(v.uid, v.displayName || v.username || 'Viewer', v.avatar); setShowViewers(false) }}
+                            disabled={stagedUids.has(v.uid)}
+                            className="p-1.5 rounded-full text-slate-500 hover:text-sky-400 hover:bg-sky-400/10 active:bg-sky-400/20 transition disabled:opacity-30 shrink-0"
+                            title={stagedUids.has(v.uid) ? 'Already on stage' : 'Invite to stage'}
+                          >
+                            <Mic size={13} />
+                          </button>
+                        )}
                       </div>
                     ))}
                   </div>
