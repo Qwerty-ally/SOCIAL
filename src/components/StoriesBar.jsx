@@ -182,8 +182,11 @@ function StoryViewer({ groups, gi: initGi, si: initSi, onClose, currentUserId })
             <img src={currentImage} alt="" className="absolute inset-0 w-full h-full object-contain" />
           </>
         ) : (
-          /* No visual media — gradient background */
-          <div className="absolute inset-0 bg-gradient-to-br from-sky-900 via-indigo-900 to-slate-900" />
+          /* No visual media — use stored bgStyle or fallback gradient */
+          <div
+            className="absolute inset-0"
+            style={{ background: story.bgStyle || 'linear-gradient(135deg, #0c4a6e, #1e1b4b, #0f172a)' }}
+          />
         )}
 
         {/* Audio player (for audio stories) */}
@@ -213,7 +216,10 @@ function StoryViewer({ groups, gi: initGi, si: initSi, onClose, currentUserId })
         {/* Text content (text-only or shared post with no image) */}
         {story.text && !currentImage && !isAudio && (
           <div className="absolute inset-0 flex items-center justify-center z-10 px-8">
-            <p className="text-white text-xl font-bold text-center leading-relaxed drop-shadow-lg">
+            <p
+              className="text-xl font-bold text-center leading-relaxed drop-shadow-lg"
+              style={{ color: story.textColor || '#ffffff' }}
+            >
               "{story.text}"
             </p>
           </div>

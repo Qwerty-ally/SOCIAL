@@ -14,6 +14,7 @@ import {
 } from 'lucide-react'
 import toast from 'react-hot-toast'
 import OwnerBadge from './OwnerBadge'
+import StoryComposer from './StoryComposer'
 
 function renderContent(text) {
   if (!text) return null
@@ -107,6 +108,7 @@ export default function PostCard({ post, onDelete }) {
   const [editingPost, setEditingPost] = useState(false)
   const [editContent, setEditContent] = useState('')
   const [savingPostEdit, setSavingPostEdit] = useState(false)
+  const [showStoryComposer, setShowStoryComposer] = useState(false)
   const heartRef = useRef(null)
 
   const timeAgo = post.createdAt?.toDate
@@ -189,28 +191,11 @@ export default function PostCard({ post, onDelete }) {
     setRsvped(!rsvped)
   }
 
-  async function shareToStory(e) {
+  function shareToStory(e) {
     e.stopPropagation()
     if (!user) return
-    try {
-      await addDoc(collection(db, 'stories'), {
-        authorId: user.uid,
-        authorName: profile?.displayName,
-        authorUsername: profile?.username,
-        authorAvatar: profile?.avatar || '',
-        mediaUrl: post.mediaUrl || post.imageUrl || null,
-        mediaUrls: post.mediaUrls || null,
-        mediaType: post.mediaType || (post.mediaUrl ? 'image' : null),
-        text: post.content,
-        sharedPostId: post.id,
-        sharedFromUser: post.authorName,
-        createdAt: serverTimestamp(),
-      })
-      toast.success('Shared to your story!')
-    } catch (err) {
-      toast.error(err.message)
-    }
     setShowMenu(false)
+    setShowStoryComposer(true)
   }
 
   async function deletePost(e) {
@@ -288,6 +273,7 @@ export default function PostCard({ post, onDelete }) {
   const canDelete = user?.uid === post.authorId || profile?.role === 'owner'
 
   return (
+    <>
     <article
       onClick={goToPost}
       className={`bg-[#1e293b] border-b border-slate-700/50 px-4 py-4 hover:bg-[#243044] transition cursor-pointer animate-fade-in relative${showMenu ? ' z-10' : ''}`}
@@ -585,6 +571,11 @@ export default function PostCard({ post, onDelete }) {
         </div>
       </div>
     </article>
+
+    {showStoryComposer && (
+      <StoryComposer post={post} onClose={() => setShowStoryComposer(false)} />
+    )}
+    </>
   )
 }
 
