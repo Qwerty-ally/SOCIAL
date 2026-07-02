@@ -263,7 +263,7 @@ export default function PostCard({ post, onDelete }) {
   return (
     <article
       onClick={goToPost}
-      className="bg-[#1e293b] border-b border-slate-700/50 px-4 py-4 hover:bg-[#243044] transition cursor-pointer animate-fade-in"
+      className={`bg-[#1e293b] border-b border-slate-700/50 px-4 py-4 hover:bg-[#243044] transition cursor-pointer animate-fade-in relative${showMenu ? ' z-10' : ''}`}
     >
       {/* Repost indicator */}
       {post.isRepost && (
