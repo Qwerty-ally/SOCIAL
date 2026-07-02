@@ -352,7 +352,7 @@ export default function PostCard({ post, onDelete }) {
                 <MoreHorizontal size={16} />
               </button>
               {showMenu && (
-                <div className="absolute right-0 top-8 bg-[#1e293b] border border-slate-700 rounded-xl shadow-xl z-20 min-w-[160px] py-1">
+                <div className="absolute right-0 top-8 bg-[#1e293b] border border-slate-700 rounded-xl shadow-xl z-50 min-w-[160px] py-1">
                   <MenuItem icon={<Link2 size={14} />} label="Copy link" onClick={copyLink} />
                   {profile?.role !== 'fan' && (
                     <MenuItem icon={<BookImage size={14} />} label="Share to story" onClick={shareToStory} />

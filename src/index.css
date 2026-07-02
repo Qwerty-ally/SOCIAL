@@ -28,8 +28,8 @@ body {
 .anchor-scrollbar::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
 
 /* ── Keyframes ── */
-@keyframes fade-in { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: translateY(0); } }
-.animate-fade-in { animation: fade-in 0.25s ease both; }
+@keyframes fade-in { from { opacity: 0; } to { opacity: 1; } }
+.animate-fade-in { animation: fade-in 0.2s ease; }
 @keyframes pulse-heart { 0% { transform: scale(1); } 50% { transform: scale(1.35); } 100% { transform: scale(1); } }
 .animate-heart { animation: pulse-heart 0.3s ease; }
 @keyframes countdown-tick { 0% { transform: scale(1.08); } 100% { transform: scale(1); } }
