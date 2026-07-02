@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from 'react'
 import { useParams, useNavigate, Link } from 'react-router-dom'
-import { doc, getDoc, setDoc, onSnapshot, addDoc, collection, updateDoc } from 'firebase/firestore'
+import { doc, getDoc, setDoc, onSnapshot, addDoc, collection, updateDoc, serverTimestamp } from 'firebase/firestore'
 import { db } from '../firebase'
 import { useAuth } from '../context/AuthContext'
 import { Users, ArrowLeft, Loader2, Mic, Video, PhoneOff } from 'lucide-react'
@@ -33,6 +33,7 @@ export default function WatchLivePage() {
   const [loading, setLoading] = useState(true)
   const [stageStatus, setStageStatus] = useState(null) // null | 'invited' | 'connecting' | 'on-stage'
   const [stageFeeds, setStageFeeds] = useState([]) // [{uid, name, avatar, stream}]
+  const [ownerStagedUids, setOwnerStagedUids] = useState(new Set())
   const videoRef = useRef(null)
   const pc = useRef(null)
   const stageStream = useRef(null)
@@ -90,6 +91,17 @@ export default function WatchLivePage() {
         setViewerList(snap.docs.map(d => ({ uid: d.id, ...d.data() })))
       })
       unsubs.current.push(viewersUnsub)
+
+      // Owner: track who is already on/invited to stage
+      if (profile?.role === 'owner') {
+        const stageInvitesUnsub = onSnapshot(collection(db, 'streams', streamId, 'stageInvites'), snap => {
+          const active = new Set(
+            snap.docs.filter(d => ['pending', 'accepted', 'connected'].includes(d.data().status)).map(d => d.id)
+          )
+          setOwnerStagedUids(active)
+        })
+        unsubs.current.push(stageInvitesUnsub)
+      }
 
       const unsub = onSnapshot(doc(db, 'streams', streamId, 'viewers', user.uid), async snap => {
         const data = snap.data()
@@ -151,6 +163,23 @@ export default function WatchLivePage() {
       console.error(err)
       toast.error('Failed to join stream')
       setLoading(false)
+    }
+  }
+
+  async function ownerInviteToStage(uid, name, avatar) {
+    if (ownerStagedUids.has(uid)) {
+      return toast.error(`${name} is already on stage or has been invited`)
+    }
+    try {
+      await setDoc(doc(db, 'streams', streamId, 'stageInvites', uid), {
+        status: 'pending',
+        viewerName: name,
+        viewerAvatar: avatar || '',
+        invitedAt: serverTimestamp(),
+      })
+      toast.success(`Stage invite sent to ${name}`)
+    } catch (err) {
+      toast.error(err.message)
     }
   }
 
@@ -384,7 +413,12 @@ export default function WatchLivePage() {
 
       {/* Chat */}
       <div className="w-full lg:w-80 h-64 lg:h-auto">
-        <StreamChat streamId={streamId} />
+        <StreamChat
+          streamId={streamId}
+          isOwner={profile?.role === 'owner'}
+          onInviteToStage={profile?.role === 'owner' ? ownerInviteToStage : undefined}
+          stagedUids={profile?.role === 'owner' ? ownerStagedUids : undefined}
+        />
       </div>
 
       {/* Stage invite dialog */}
