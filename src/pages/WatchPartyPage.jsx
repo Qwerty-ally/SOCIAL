@@ -47,13 +47,15 @@ export default function WatchPartyPage() {
   const [scheduleInput, setScheduleInput] = useState('')
   const [showSchedulePicker, setShowSchedulePicker] = useState(false)
   const [savingSchedule, setSavingSchedule] = useState(false)
+  const [viewerMode, setViewerMode] = useState(false)
   const videoRef = useRef(null)
   const syncRef = useRef(null)
   const bottomRef = useRef(null)
   const mainFileRef = useRef(null)
   const wentLiveRef = useRef(false)
 
-  const isHost = party?.hostId === user?.uid
+  const actualIsHost = party?.hostId === user?.uid
+  const isHost = actualIsHost && !viewerMode
   const isStartingSoon = party?.status === 'starting-soon'
   const secsLeft = useCountdownTo(party?.scheduledStartAt)
 
@@ -202,7 +204,7 @@ export default function WatchPartyPage() {
               <div className="min-w-0">
                 <p className="text-sm font-semibold text-white truncate">{party.hostName}'s Watch Party</p>
                 <p className="text-xs text-slate-400 flex items-center gap-1">
-                  <Users size={10} /> {isHost ? 'You are the host' : 'Watching together'}
+                  <Users size={10} /> {isHost ? 'You are the host' : actualIsHost ? 'Watching as viewer' : 'Watching together'}
                 </p>
               </div>
               <div className="ml-auto flex items-center gap-2 shrink-0">
@@ -211,6 +213,14 @@ export default function WatchPartyPage() {
                     <span className="w-1.5 h-1.5 rounded-full bg-amber-400 animate-pulse" />
                     Starting Soon
                   </span>
+                )}
+                {actualIsHost && (
+                  <button
+                    onClick={() => setViewerMode(v => !v)}
+                    className="text-xs font-semibold bg-slate-700 hover:bg-slate-600 text-slate-300 px-3 py-1 rounded-full transition"
+                  >
+                    {viewerMode ? 'Host mode' : 'Watch as viewer'}
+                  </button>
                 )}
                 {isHost && (
                   <button
