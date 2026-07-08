@@ -1,7 +1,7 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import {
   collection, query, orderBy, limit, startAfter,
-  getDocs, updateDoc, doc
+  getDocs, updateDoc, doc, serverTimestamp
 } from 'firebase/firestore'
 import { db } from '../firebase'
 import { useAuth } from '../context/AuthContext'
@@ -28,12 +28,49 @@ export default function MembersPage() {
   const [search, setSearch] = useState('')
   const [busy, setBusy] = useState(null)
   const [confirmKick, setConfirmKick] = useState(null)
+  const [now, setNow] = useState(Date.now())
+  const removeTimers = useRef({})
+
+  const TEN_MIN = 10 * 60 * 1000
+
+  function getBannedMs(bannedAt) {
+    if (!bannedAt) return 0
+    if (bannedAt instanceof Date) return bannedAt.getTime()
+    if (typeof bannedAt.toDate === 'function') return bannedAt.toDate().getTime()
+    if (bannedAt.seconds) return bannedAt.seconds * 1000
+    return 0
+  }
+
+  function scheduleRemoval(uid, bannedAt) {
+    if (removeTimers.current[uid]) return
+    const ba = getBannedMs(bannedAt)
+    if (!ba) return
+    const remaining = TEN_MIN - (Date.now() - ba)
+    if (remaining <= 0) return
+    removeTimers.current[uid] = setTimeout(() => {
+      setMembers(prev => prev.filter(m => m.id !== uid))
+      delete removeTimers.current[uid]
+    }, remaining)
+  }
 
   useEffect(() => {
     if (profile && profile.role !== 'owner') navigate('/', { replace: true })
   }, [profile])
 
   useEffect(() => { fetchPage() }, [])
+
+  // Re-check every 30 s so the hide happens within 30 s of the 10-min mark
+  useEffect(() => {
+    const id = setInterval(() => setNow(Date.now()), 30_000)
+    return () => clearInterval(id)
+  }, [])
+
+  // Schedule removal for any recently-banned members already in the list
+  useEffect(() => {
+    members.forEach(m => {
+      if (m.banned && m.bannedAt) scheduleRemoval(m.id, m.bannedAt)
+    })
+  }, [members])
 
   async function fetchPage(after = null) {
     try {
@@ -54,8 +91,9 @@ export default function MembersPage() {
   async function kickMember(uid, name) {
     setBusy(uid)
     try {
-      await updateDoc(doc(db, 'users', uid), { banned: true })
-      setMembers(prev => prev.map(m => m.id === uid ? { ...m, banned: true } : m))
+      await updateDoc(doc(db, 'users', uid), { banned: true, bannedAt: serverTimestamp() })
+      const localNow = new Date()
+      setMembers(prev => prev.map(m => m.id === uid ? { ...m, banned: true, bannedAt: localNow } : m))
       toast.success(`${name} has been kicked`)
     } catch (err) {
       toast.error(err.message)
@@ -78,13 +116,20 @@ export default function MembersPage() {
     }
   }
 
+  const visible = members.filter(m => {
+    if (!m.banned) return true
+    const ba = getBannedMs(m.bannedAt)
+    if (!ba) return true // no timestamp yet — keep showing
+    return now - ba < TEN_MIN
+  })
+
   const filtered = search.trim()
-    ? members.filter(m =>
+    ? visible.filter(m =>
         m.displayName?.toLowerCase().includes(search.toLowerCase()) ||
         m.username?.toLowerCase().includes(search.toLowerCase()) ||
         m.email?.toLowerCase().includes(search.toLowerCase())
       )
-    : members
+    : visible
 
   return (
     <div className="max-w-2xl mx-auto px-4 py-6">
