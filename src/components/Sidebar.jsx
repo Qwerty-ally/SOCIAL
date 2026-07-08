@@ -37,9 +37,9 @@ export default function Sidebar() {
   }
 
   return (
-    <aside className="hidden md:flex flex-col justify-between w-64 shrink-0 h-screen sticky top-0 border-r border-slate-700/60 px-4 py-6 z-20">
-      {/* Logo */}
-      <div>
+    <aside className="hidden md:flex flex-col w-64 shrink-0 h-screen sticky top-0 border-r border-slate-700/60 px-4 py-6 z-20">
+      {/* Scrollable top section */}
+      <div className="flex-1 min-h-0 overflow-y-auto [&::-webkit-scrollbar]:hidden [scrollbar-width:none]">
         <Link to="/" className="flex items-center gap-2 mb-8 px-2">
           <div className="w-9 h-9 rounded-xl bg-sky-500 flex items-center justify-center shadow shadow-sky-500/40">
             <Anchor size={20} className="text-white" />
@@ -109,9 +109,9 @@ export default function Sidebar() {
         </div>
       </div>
 
-      {/* Profile footer */}
+      {/* Profile footer — always pinned to bottom */}
       {profile && (
-        <div className="flex items-center gap-3 px-2 py-3 rounded-xl hover:bg-slate-800 cursor-pointer group">
+        <div className="shrink-0 mt-2 flex items-center gap-3 px-2 py-3 rounded-xl hover:bg-slate-800 cursor-pointer group">
           <div className="relative">
             <img src={profile.avatar} alt="" className="w-9 h-9 rounded-full object-cover" />
             <div className="absolute bottom-0 right-0 w-3 h-3 bg-green-400 rounded-full border-2 border-[#0f172a]" />

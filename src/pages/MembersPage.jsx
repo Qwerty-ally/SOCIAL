@@ -149,7 +149,7 @@ export default function MembersPage() {
                   <ExternalLink size={14} />
                 </button>
 
-                {member.id !== profile?.id && member.role !== 'owner' && (
+                {member.id !== profile?.id && (
                   member.banned ? (
                     <button
                       onClick={() => unbanMember(member.id, member.displayName)}
