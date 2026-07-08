@@ -6,7 +6,7 @@ import { useNotifCount } from '../hooks/useNotifCount'
 import ThemePicker from './ThemePicker'
 import {
   Anchor, Home, Search, Bell, User, PlusSquare, MessageCircle,
-  Compass, LogOut, Bookmark, TrendingUp, Crown, Radio, Users
+  Compass, LogOut, Bookmark, TrendingUp, Crown, Radio, Users, Shield
 } from 'lucide-react'
 import toast from 'react-hot-toast'
 
@@ -27,6 +27,7 @@ export default function Sidebar() {
     ...(!isFan ? [{ to: '/messages', icon: <MessageCircle size={22} />, label: 'Messages' }] : []),
     { to: '/bookmarks',      icon: <Bookmark size={22} />,    label: 'Bookmarks' },
     { to: `/profile/${profile?.username}`, icon: <User size={22} />, label: 'Profile' },
+    ...(isOwner ? [{ to: '/members', icon: <Shield size={22} />, label: 'Members' }] : []),
   ]
 
   async function logout() {

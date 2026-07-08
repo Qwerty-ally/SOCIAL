@@ -1,7 +1,7 @@
 import { Link, useLocation } from 'react-router-dom'
 import { useAuth } from '../context/AuthContext'
 import { useNotifCount } from '../hooks/useNotifCount'
-import { Home, Compass, Bell, MessageCircle, User } from 'lucide-react'
+import { Home, Compass, Bell, MessageCircle, User, Shield } from 'lucide-react'
 
 export default function MobileNav() {
   const { profile } = useAuth()
@@ -9,6 +9,7 @@ export default function MobileNav() {
   const unread = useNotifCount()
 
   const isFan = profile?.role === 'fan'
+  const isOwner = profile?.role === 'owner'
 
   const links = [
     { to: '/',              icon: <Home size={22} /> },
@@ -16,6 +17,7 @@ export default function MobileNav() {
     { to: '/notifications', icon: <Bell size={22} />, badge: unread },
     ...(!isFan ? [{ to: '/messages', icon: <MessageCircle size={22} /> }] : []),
     { to: `/profile/${profile?.username}`, icon: <User size={22} /> },
+    ...(isOwner ? [{ to: '/members', icon: <Shield size={20} /> }] : []),
   ]
 
   return (

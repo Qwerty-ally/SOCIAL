@@ -1,5 +1,5 @@
 import { createContext, useContext, useEffect, useRef, useState } from 'react'
-import { onAuthStateChanged } from 'firebase/auth'
+import { onAuthStateChanged, signOut } from 'firebase/auth'
 import { doc, getDoc, onSnapshot, setDoc, updateDoc, serverTimestamp } from 'firebase/firestore'
 import { auth, db } from '../firebase'
 
@@ -23,6 +23,11 @@ export function AuthProvider({ children }) {
 
         try {
           const snap = await getDoc(ref)
+          if (snap.exists() && snap.data().banned) {
+            await signOut(auth)
+            setLoading(false)
+            return
+          }
           if (!snap.exists()) {
             const username = firebaseUser.email
               ?.split('@')[0]
@@ -52,7 +57,14 @@ export function AuthProvider({ children }) {
 
         // Real-time listener — keeps profile.following and all fields in sync
         profileUnsubRef.current = onSnapshot(ref, snap => {
-          if (snap.exists()) setProfile({ id: snap.id, ...snap.data() })
+          if (snap.exists()) {
+            const data = snap.data()
+            if (data.banned) {
+              signOut(auth)
+              return
+            }
+            setProfile({ id: snap.id, ...data })
+          }
           setLoading(false)
         }, () => setLoading(false))
       } else {
