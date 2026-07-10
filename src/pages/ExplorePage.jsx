@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react'
 import { collection, query, orderBy, getDocs, limit, where } from 'firebase/firestore'
 import { db } from '../firebase'
+import { useAuth } from '../context/AuthContext'
 import PostCard from '../components/PostCard'
 import { Link } from 'react-router-dom'
 import { Search, Loader2, Hash } from 'lucide-react'
@@ -8,6 +9,7 @@ import { Search, Loader2, Hash } from 'lucide-react'
 const TRENDING_TAGS = ['anchor', 'global', 'news', 'vibes', 'art', 'music', 'tech', 'gaming', 'food', 'travel']
 
 export default function ExplorePage() {
+  const { user } = useAuth()
   const [searchQ, setSearchQ] = useState('')
   const [results, setResults] = useState([])
   const [posts, setPosts] = useState([])
@@ -15,9 +17,12 @@ export default function ExplorePage() {
   const [searching, setSearching] = useState(false)
 
   useEffect(() => {
+    const now = new Date().toISOString()
     const q = query(collection(db, 'posts'), orderBy('createdAt', 'desc'), limit(40))
     getDocs(q).then(snap => {
-      setPosts(snap.docs.map(d => ({ id: d.id, ...d.data() })))
+      setPosts(snap.docs.map(d => ({ id: d.id, ...d.data() })).filter(p =>
+        !p.publishAt || p.publishAt <= now || p.authorId === user?.uid
+      ))
       setLoading(false)
     })
   }, [])
@@ -44,9 +49,13 @@ export default function ExplorePage() {
 
     // Search posts by tag
     try {
+      const now = new Date().toISOString()
       const tag = searchQ.replace('#', '').toLowerCase().trim()
       const snap = await getDocs(query(collection(db, 'posts'), where('tags', 'array-contains', tag), orderBy('createdAt', 'desc'), limit(20)))
-      snap.docs.forEach(d => combined.push({ id: d.id, ...d.data(), _type: 'post' }))
+      snap.docs.forEach(d => {
+        const p = { id: d.id, ...d.data(), _type: 'post' }
+        if (!p.publishAt || p.publishAt <= now || p.authorId === user?.uid) combined.push(p)
+      })
     } catch {}
 
     setResults(combined)
