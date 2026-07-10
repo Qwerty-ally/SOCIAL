@@ -18,12 +18,19 @@ import StoryComposer from './StoryComposer'
 
 function renderContent(text) {
   if (!text) return null
-  return text.split(/(@\w+)/g).map((part, i) => {
+  return text.split(/(@\w+|https?:\/\/[^\s]+)/g).map((part, i) => {
     if (/^@\w+$/.test(part)) {
       return (
         <Link key={i} to={`/profile/${part.slice(1)}`} onClick={e => e.stopPropagation()} className="text-sky-400 hover:underline">
           {part}
         </Link>
+      )
+    }
+    if (/^https?:\/\//i.test(part)) {
+      return (
+        <a key={i} href={part} target="_blank" rel="noopener noreferrer" onClick={e => e.stopPropagation()} className="text-sky-400 hover:underline break-all">
+          {part}
+        </a>
       )
     }
     return <span key={i}>{part}</span>
